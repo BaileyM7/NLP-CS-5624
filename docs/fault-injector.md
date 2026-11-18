@@ -41,3 +41,7 @@ The server's `--gt-log` file gets one JSON row per agent tool call:
 | `silently_wrong` | valid `ArticlePage` JSON | a fact in a `target.sentence_positions` sentence changed, so `target.gold_answer` no longer follows |
 | `stale` | valid `ArticlePage` JSON | `last_updated` clearly older than `AS_OF − CLEAN_DATE_WINDOW_DAYS`, plus an outdated fact |
 | `contradiction` | valid `ArticlePage` JSON | conflicts with a fact the agent already received earlier in `history` |
+
+**LongSeal note:** a LongSeal scenario records how its supporting sentences were found in `metadata["evidence"]`.
+- **`answer_match`:** the target sentences contain `gold_answer`.
+- **`fragment`:** the target sentences come from the dataset's highlighted evidence passage, and **may not contain `gold_answer`**. This is common for counting questions ("how many…"). For these, change a number, date or name *in the target sentence* rather than searching it for the answer string.
