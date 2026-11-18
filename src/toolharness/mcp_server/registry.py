@@ -3,10 +3,15 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..app.backend import ToolBackend
 from ..app.mock_app import MockApp
-from ..data.scenario import Scenario
+from ..data.scenario import FaultType, Scenario
+from ..injector.corruptors import Corruptor
+from ..injector.faults import CORRUPTORS
+from ..injector.ground_truth import GroundTruthLog
+from ..injector.injector import FaultInjector
 
 
 class EpisodeError(Exception):
@@ -24,13 +29,20 @@ class Episode:
 class EpisodeRegistry:
     """Creates one episode per episode ID on first use and returns it on later calls."""
 
-    def __init__(self, scenarios: list[Scenario]):
+    def __init__(
+        self,
+        scenarios: list[Scenario],
+        gt_log_path: str | Path | None = None,
+        corruptors: dict[FaultType, Corruptor] | None = None,
+    ):
         self.scenarios: dict[str, Scenario] = {}
         for scenario in scenarios:
             if scenario.scenario_id in self.scenarios:
                 raise ValueError(f"duplicate scenario_id {scenario.scenario_id!r}")
             self.scenarios[scenario.scenario_id] = scenario
 
+        self.gt_log = GroundTruthLog(gt_log_path) if gt_log_path else None
+        self.corruptors = corruptors if corruptors is not None else CORRUPTORS
         self.apps: dict[str, MockApp] = {}  # one read-only MockApp per scenario, shared by its episodes
         self.episodes: dict[str, Episode] = {}
         self.lock = threading.Lock()
@@ -61,9 +73,13 @@ class EpisodeRegistry:
             return backend
 
     def _build_backend(self, scenario: Scenario, episode_id: str, fault_seed: int) -> ToolBackend:
-        """Build the tool stack for a new episode: the scenario's shared MockApp."""
+        """Build the tool stack for a new episode: FaultInjector wrapping the scenario's shared MockApp."""
+        corruptor = self.corruptors.get(scenario.fault_type)
+        if corruptor is None:
+            raise EpisodeError(f"fault type {scenario.fault_type.value!r} is not implemented yet")
+
         app = self.apps.get(scenario.scenario_id)
         if app is None:
             app = MockApp(scenario)
             self.apps[scenario.scenario_id] = app
-        return app
+        return FaultInjector(app, scenario, corruptor, fault_seed, episode_id, self.gt_log)

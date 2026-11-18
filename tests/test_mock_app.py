@@ -118,6 +118,15 @@ def test_answer_pages_point_at_the_page_holding_the_fact():
     assert app.answer_pages() == {("Long", 2)}
 
 
+def test_supporting_positions_are_relative_to_the_page():
+    long_doc = Document(title="Long", sentences=["z" * 2000, "w" * 2000, "The answer is here."])
+    app = MockApp(make_scenario([long_doc], [SupportingFact(title="Long", sent_id=2)]))
+    assert app.pages["Long"] == [[0], [1, 2]]
+    assert app.supporting_positions("Long", 2) == [1]
+    assert app.supporting_positions("Long", 1) == []
+    assert app.supporting_positions("Missing", 1) == []
+
+
 # call()
 
 def test_call_returns_json_text(small_app):

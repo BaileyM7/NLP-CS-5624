@@ -5,12 +5,13 @@ One long-running MCP server serves every episode's tools over streamable HTTP. T
 ## Start it
 ```bash
 python -m toolharness.data.hotpotqa --n 50 --seed 0 --out data/scenarios/hotpotqa.jsonl   # once
-python -m toolharness.mcp_server --scenarios data/scenarios/hotpotqa.jsonl --port 8765
+python -m toolharness.mcp_server --scenarios data/scenarios/hotpotqa.jsonl --port 8765 --gt-log runs/<run-id>/ground_truth.jsonl
 ```
 - MCP endpoint: `http://127.0.0.1:8765/mcp`
 - Health check: `GET http://127.0.0.1:8765/health` → `{"status": "ok", "scenarios": N, "episodes": N}`
 - Pass several files to `--scenarios` to serve HotpotQA and LongSeal together.
 - Episodes live in memory, so restart the server between experiment runs.
+- `--gt-log` (default `runs/ground_truth.jsonl`) is appended to with one row per agent tool call. It records which call was corrupted. Use a fresh path per run.
 - The server only accepts `localhost` / `127.0.0.1` connections (the MCP SDK's default protection).
 
 ## Identify the episode on every call
@@ -25,6 +26,7 @@ Send these HTTP headers with every request:
 - The first call with a new episode ID creates the episode; later calls with that ID reuse it.
 - An episode can't change its scenario or seed.
 - A missing or unknown ID fails the request with an `MCPError` (JSON-RPC error). It is never returned to the agent as a tool result.
+- A scenario whose fault type has no corruptor yet (see `docs/fault-injector.md`) also fails with an `MCPError`, instead of being served clean.
 
 ## Tools
 Both tools return **plain JSON text** in `result.content[0].text`. There's no structured output, so a malformed response reaches the agent as-is.
@@ -63,4 +65,4 @@ async with httpx2.AsyncClient(headers=headers, timeout=httpx2.Timeout(30, read=3
 
 ## Notes for the proxy (#17)
 - Forward all three headers unchanged on every upstream call.
-- Never read the fault injector's ground-truth log. The proxy may only see what the agent sees.
+- Never read the ground-truth log (`--gt-log`). The proxy may only see what the agent sees.

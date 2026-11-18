@@ -134,7 +134,12 @@ def http_server(tmp_path):
     port = free_port()
     log = open(tmp_path / "server.log", "w")
     process = subprocess.Popen(
-        [sys.executable, "-m", "toolharness.mcp_server", "--scenarios", str(SAMPLE_FILE), "--port", str(port)],
+        [
+            sys.executable, "-m", "toolharness.mcp_server",
+            "--scenarios", str(SAMPLE_FILE),
+            "--port", str(port),
+            "--gt-log", str(tmp_path / "ground_truth.jsonl"),
+        ],
         stdout=log,
         stderr=subprocess.STDOUT,
     )
@@ -170,7 +175,7 @@ async def call_over_http(base_url, episode_id, scenario_id, tool, args):
 
 
 @pytest.mark.anyio
-async def test_http_serves_two_episodes_concurrently(http_server, scenarios):
+async def test_http_serves_two_episodes_concurrently(http_server, scenarios, tmp_path):
     first, second = scenarios[0], scenarios[1]
     results = await asyncio.gather(
         call_over_http(http_server, "ep-1", first.scenario_id, "search", {"query": first.question}),
@@ -186,3 +191,7 @@ async def test_http_serves_two_episodes_concurrently(http_server, scenarios):
 
     health = httpx2.get(http_server + "/health", timeout=5).json()
     assert health["episodes"] == 2
+
+    # The server logged one ground-truth row per episode
+    log_lines = (tmp_path / "ground_truth.jsonl").read_text(encoding="utf-8").splitlines()
+    assert sorted(json.loads(line)["episode_id"] for line in log_lines) == ["ep-1", "ep-2"]

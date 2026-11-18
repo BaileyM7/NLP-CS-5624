@@ -145,6 +145,19 @@ class MockApp:
                     result.add((fact.title, page_number))
         return result
 
+    def supporting_positions(self, title: str, page: int) -> list[int]:
+        """Positions in this page's `sentences` list that hold a supporting fact."""
+        if title not in self.pages or page < 1 or page > len(self.pages[title]):
+            return []
+        sentence_ids = self.pages[title][page - 1]
+        positions = []
+        for fact in self.scenario.supporting_facts:
+            if fact.title == title and fact.sent_id in sentence_ids:
+                position = sentence_ids.index(fact.sent_id)
+                if position not in positions:
+                    positions.append(position)
+        return sorted(positions)
+
     def call(self, tool: str, args: dict[str, Any]) -> ToolResponse:
         """Run a tool by name and return its result as JSON text."""
         if tool == "search":
