@@ -38,10 +38,10 @@ The placeholder test should pass, confirming the package installs correctly.
 
 ```
 src/toolharness/
-    data/      # data utilities
-    app/       # application entry points
-    mcp_server/ # MCP server integration
-    injector/  # dependency injection helpers
+    data/      # dataset loading + Scenario model (HotpotQA, LongSeal)
+    app/       # mock application: the "real" tools with ground truth
+    mcp_server/ # MCP server exposing the tools
+    injector/  # fault injector: corrupts scheduled tool responses
     proxy/     # proxy utilities
     agent/     # agent orchestration
     eval/      # evaluation utilities

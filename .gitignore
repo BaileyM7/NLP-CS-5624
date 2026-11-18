@@ -4,8 +4,10 @@
 # Environment variables
 .env
 
-# Data directories
+# Data directories (full generated scenario files are rebuilt from a seed;
+# only the small files in data/sample/ are committed)
 data/raw/
+data/scenarios/
 
 # Model runs / outputs
 runs/
