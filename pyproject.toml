@@ -15,6 +15,7 @@ dependencies = [
     "pandas",
     "matplotlib",
     "python-dotenv",
+    "rank-bm25",
 ]
 
 [project.optional-dependencies]
