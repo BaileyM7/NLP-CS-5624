@@ -42,6 +42,12 @@ The server's `--gt-log` file gets one JSON row per agent tool call:
 | `stale` | valid `ArticlePage` JSON | `last_updated` clearly older than `AS_OF − CLEAN_DATE_WINDOW_DAYS`, plus an outdated fact |
 | `contradiction` | valid `ArticlePage` JSON | conflicts with a fact the agent already received earlier in `history` |
 
+## Implemented faults
+| Fault | File | What the agent gets |
+|---|---|---|
+| `hard_failure` (#9) | `faults/hard_failure.py` | `isError: true` with one of five API errors (500, 502, 503, 504, 429). No simulated delay: the server's tools share one event loop, so sleeping would stall every episode. |
+| `malformed` (#10) | `faults/malformed.py` | A normal (non-error) result in one of four variants: an HTML error page, `sentences` missing, `sentences` replaced by a count, or the response cut off partway into the first supporting sentence, before the answer. No variant keeps a full supporting sentence, so the agent has to re-fetch to answer from this page. |
+
 **LongSeal note:** a LongSeal scenario records how its supporting sentences were found in `metadata["evidence"]`.
 - **`answer_match`:** the target sentences contain `gold_answer`.
 - **`fragment`:** the target sentences come from the dataset's highlighted evidence passage, and **may not contain `gold_answer`**. This is common for counting questions ("how many…"). For these, change a number, date or name *in the target sentence* rather than searching it for the answer string.
