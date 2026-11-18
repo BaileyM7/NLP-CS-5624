@@ -1,0 +1,27 @@
+[project]
+name = "toolharness"
+version = "0.1.0"
+description = "Harness to self-identify bad tool responses."
+authors = [{name = "Your Name", email = "you@example.com"}]
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+
+dependencies = [
+    "mcp",
+    "pydantic",
+    "openai",
+    "datasets",
+    "pandas",
+    "matplotlib",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
