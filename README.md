@@ -37,6 +37,9 @@ The placeholder test should pass, confirming the package installs correctly.
 ## Experiment documentation
 
 - [Experiment specification](docs/experiment-spec.md): conditions, fault definitions, outcome metrics, and episode budgets.
+- [Trace format](docs/trace-format.md): episode and turn schema, JSONL helpers, and ground-truth separation.
+- [Fault injector](docs/fault-injector.md): injection behavior and fault implementation notes.
+- [Tool server](docs/tool-server.md): local MCP server setup and tool interface.
 
 ## Project layout
 
