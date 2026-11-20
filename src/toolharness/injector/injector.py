@@ -51,8 +51,9 @@ class FaultInjector:
 
         corrupted = False
         returned = clean
-        if self.corrupted_record is None and self.corruptor.should_trigger(call, clean, self.history, self.answer_pages):
-            returned = self.corruptor.corrupt(call, clean, self.history, self.rng, self._answer_target(clean))
+        target = self._answer_target(clean)
+        if self.corrupted_record is None and self.corruptor.should_trigger(call, clean, self.history, target):
+            returned = self.corruptor.corrupt(call, clean, self.history, self.rng, target)
             corrupted = True
 
         record = CallRecord(
@@ -76,6 +77,7 @@ class FaultInjector:
             return None
         title, page = key
         return AnswerTarget(
+            scenario_id=self.scenario.scenario_id,
             title=title,
             page=page,
             sentence_positions=self.inner.supporting_positions(title, page),

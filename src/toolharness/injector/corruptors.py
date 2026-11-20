@@ -31,10 +31,16 @@ class CallRecord:
 class AnswerTarget:
     """The answer page being corrupted and where its supporting sentences are."""
 
+    scenario_id: str
     title: str
     page: int
     sentence_positions: list[int]  # indexes into the page's "sentences" list
     gold_answer: str
+
+
+def to_json(data: dict) -> str:
+    """Serialize a response the same way the mock app does: compact, non-ASCII kept as is."""
+    return json.dumps(data, separators=(",", ":"), ensure_ascii=False)
 
 
 def article_page_key(response: ToolResponse) -> tuple[str, int] | None:
@@ -56,12 +62,10 @@ class Corruptor:
         call: ToolCall,
         clean: ToolResponse,
         history: list[CallRecord],
-        answer_pages: set[tuple[str, int]],
+        target: AnswerTarget | None,
     ) -> bool:
-        """Fire on a get_article call that returns a page holding a supporting fact."""
-        if call.tool != "get_article":
-            return False
-        return article_page_key(clean) in answer_pages
+        """Fire on a get_article call that returns an answer page (target is set only for those)."""
+        return call.tool == "get_article" and target is not None
 
     def corrupt(
         self,
@@ -81,7 +85,7 @@ class Corruptor:
 class NoFault(Corruptor):
     """Clean control episodes: never fires."""
 
-    def should_trigger(self, call, clean, history, answer_pages) -> bool:
+    def should_trigger(self, call, clean, history, target) -> bool:
         return False
 
     def corrupt(self, call, clean, history, rng, target) -> ToolResponse:

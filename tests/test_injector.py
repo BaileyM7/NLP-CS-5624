@@ -162,7 +162,7 @@ def test_summary_reports_whether_the_fault_was_injected(tmp_path, app, scenario,
 
 def test_registry_rejects_fault_types_without_a_corruptor(scenario):
     registry = EpisodeRegistry([scenario])
-    with pytest.raises(EpisodeError, match="not implemented"):
+    with pytest.raises(EpisodeError, match="no corruptor"):
         registry.get_or_create("ep-1", scenario.scenario_id, 0)
 
 

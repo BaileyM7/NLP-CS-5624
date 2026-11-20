@@ -76,7 +76,10 @@ class EpisodeRegistry:
         """Build the tool stack for a new episode: FaultInjector wrapping the scenario's shared MockApp."""
         corruptor = self.corruptors.get(scenario.fault_type)
         if corruptor is None:
-            raise EpisodeError(f"fault type {scenario.fault_type.value!r} is not implemented yet")
+            raise EpisodeError(
+                f"no corruptor for fault type {scenario.fault_type.value!r}: "
+                "not implemented yet, or its data (e.g. --edits) wasn't loaded"
+            )
 
         app = self.apps.get(scenario.scenario_id)
         if app is None:

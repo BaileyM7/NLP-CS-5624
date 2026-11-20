@@ -9,6 +9,9 @@
 data/raw/
 data/scenarios/
 
+# LongSeal fact edits quote benchmark text; HotpotQA edits in data/edits/ are committed
+data/edits/*longseal*
+
 # Model runs / outputs
 runs/
 

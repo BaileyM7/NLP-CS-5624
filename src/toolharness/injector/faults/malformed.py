@@ -5,7 +5,7 @@ import json
 import random
 
 from ...app.backend import ToolResponse
-from ..corruptors import AnswerTarget, Corruptor
+from ..corruptors import AnswerTarget, Corruptor, to_json
 
 VARIANTS = ["invalid_json", "missing_field", "wrong_type", "truncated"]
 
@@ -19,11 +19,6 @@ HTML_ERROR_PAGE = (
 )
 
 CUT_MARK = "￿"  # marks the truncation point; never appears in article text
-
-
-def to_json(data: dict) -> str:
-    """Serialize the same way the mock app does: compact, non-ASCII kept as is."""
-    return json.dumps(data, separators=(",", ":"), ensure_ascii=False)
 
 
 def truncate_in_target(data: dict, target: AnswerTarget, rng: random.Random) -> str:
