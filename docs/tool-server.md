@@ -5,8 +5,9 @@ One long-running MCP server serves every episode's tools over streamable HTTP. T
 ## Start it
 ```bash
 python -m toolharness.data.hotpotqa --n 50 --seed 0 --out data/scenarios/hotpotqa.jsonl   # once
-python -m toolharness.mcp_server --scenarios data/scenarios/hotpotqa.jsonl --port 8765 --gt-log runs/<run-id>/ground_truth.jsonl
+python -m toolharness.mcp_server --scenarios data/scenarios/hotpotqa.jsonl --edits data/edits/hotpotqa.jsonl --port 8765 --gt-log runs/<run-id>/ground_truth.jsonl
 ```
+- `--edits` loads the fact edits that silently_wrong scenarios need (see `docs/fault-injector.md`). Without it, those episodes are rejected.
 - MCP endpoint: `http://127.0.0.1:8765/mcp`
 - Health check: `GET http://127.0.0.1:8765/health` → `{"status": "ok", "scenarios": N, "episodes": N}`
 - Pass several files to `--scenarios` to serve HotpotQA and LongSeal together.

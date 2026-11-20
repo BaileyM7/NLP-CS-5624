@@ -5,6 +5,7 @@ Small committed samples for development and tests. Full scenario files go in `da
 | File | Contents | Rebuild with |
 |---|---|---|
 | `hotpotqa_sample.jsonl` | 5 questions × 6 fault conditions = 30 scenarios | `python -m toolharness.data.hotpotqa --n 5 --seed 0 --out data/sample/hotpotqa_sample.jsonl` |
+| `hotpotqa_sample_edits.jsonl` | Fact edits for the sample's silently_wrong answer pages (10) | `python -m toolharness.data.fact_edits --scenarios data/sample/hotpotqa_sample.jsonl --out data/sample/hotpotqa_sample_edits.jsonl` (needs `OPENROUTER_API_KEY`) |
 
 LongSeal (SealQA) data is never committed: it is a benchmark with a training-contamination canary and this repo is public. Build it locally (downloads ~73 MB once):
 

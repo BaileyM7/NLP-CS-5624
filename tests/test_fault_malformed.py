@@ -25,7 +25,7 @@ def answer_page(scenario):
     app = MockApp(scenario)
     title, page = sorted(app.answer_pages())[0]
     args = {"title": title, "page": page}
-    target = AnswerTarget(title, page, app.supporting_positions(title, page), scenario.gold_answer)
+    target = AnswerTarget(scenario.scenario_id, title, page, app.supporting_positions(title, page), scenario.gold_answer)
     return app, args, app.call("get_article", args).text, target
 
 
@@ -77,7 +77,7 @@ def test_truncation_cuts_inside_the_supporting_sentence_before_the_answer():
         "source_id": "src-1",
     }
     clean = json.dumps(page, separators=(",", ":"))
-    target = AnswerTarget("Marrying the Mafia II", 1, [1], "Shin Hyun-joon")
+    target = AnswerTarget("test-scenario", "Marrying the Mafia II", 1, [1], "Shin Hyun-joon")
     prefix = '{"title":"Marrying the Mafia II","page":1,"total_pages":1,"sentences":["A 2005 comedy film.","'
 
     for seed in range(20):
