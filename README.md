@@ -34,6 +34,10 @@ pytest
 
 The placeholder test should pass, confirming the package installs correctly.
 
+## Experiment documentation
+
+- [Experiment specification](docs/experiment-spec.md): conditions, fault definitions, outcome metrics, and episode budgets.
+
 ## Project layout
 
 ```
