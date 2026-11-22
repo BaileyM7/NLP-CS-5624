@@ -40,6 +40,7 @@ The placeholder test should pass, confirming the package installs correctly.
 - [Trace format](docs/trace-format.md): episode and turn schema, JSONL helpers, and ground-truth separation.
 - [Fault injector](docs/fault-injector.md): injection behavior and fault implementation notes.
 - [Tool server](docs/tool-server.md): local MCP server setup and tool interface.
+- [LLM client](docs/llm-client.md): model registry, OpenRouter client, cost tracking and the model smoke test.
 
 ## Project layout
 
@@ -49,6 +50,7 @@ src/toolharness/
     app/       # mock application: the "real" tools with ground truth
     mcp_server/ # MCP server exposing the tools
     injector/  # fault injector: corrupts scheduled tool responses
+    llm/       # model registry + OpenRouter client (tool calls, retries, cost)
     proxy/     # proxy utilities
     agent/     # agent orchestration
     eval/      # evaluation utilities
