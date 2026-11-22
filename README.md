@@ -41,6 +41,7 @@ The placeholder test should pass, confirming the package installs correctly.
 - [Fault injector](docs/fault-injector.md): injection behavior and fault implementation notes.
 - [Tool server](docs/tool-server.md): local MCP server setup and tool interface.
 - [LLM client](docs/llm-client.md): model registry, OpenRouter client, cost tracking and the model smoke test.
+- [Agent runner](docs/agent-runner.md): running episodes and batches, budget rules, the thought argument, run files.
 
 ## Project layout
 
@@ -52,7 +53,7 @@ src/toolharness/
     injector/  # fault injector: corrupts scheduled tool responses
     llm/       # model registry + OpenRouter client (tool calls, retries, cost)
     proxy/     # proxy utilities
-    agent/     # agent orchestration
+    agent/     # ReAct agent runner: episode loop, budget limits, batch runs
     eval/      # evaluation utilities
 tests/        # test suite
 scripts/      # helper scripts
