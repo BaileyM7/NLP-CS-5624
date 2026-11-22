@@ -61,6 +61,12 @@ def make_scenario_id(dataset: str, question_id: str, fault: FaultType) -> str:
     return f"{dataset}-{question_id}-{fault.value}"
 
 
+def fault_variant_id(scenario_id: str, fault: FaultType) -> str:
+    """The ID of the same question's scenario under another fault type."""
+    question_part = scenario_id.rsplit("-", 1)[0]  # fault values contain no "-"
+    return f"{question_part}-{fault.value}"
+
+
 def write_jsonl(scenarios: Iterable[Scenario], path: str | Path) -> int:
     """Write one scenario per line and return how many were written."""
     path = Path(path)

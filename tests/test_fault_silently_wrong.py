@@ -7,7 +7,7 @@ from mcp import Client
 
 from toolharness.app.backend import ArticlePage
 from toolharness.app.mock_app import MockApp
-from toolharness.data.fact_edits import FactEdit, missing_edits, read_edits, write_edits
+from toolharness.data.fact_edits import missing_edits, read_edits, write_edits
 from toolharness.data.scenario import FaultType, write_jsonl
 from toolharness.injector.faults import build_corruptors
 from toolharness.injector.faults.silently_wrong import SilentlyWrong
@@ -21,29 +21,13 @@ SYMPHONY = {"title": "Symphony in Black", "page": 1}
 HOLIDAY = {"title": "Billie Holiday", "page": 1}
 
 
-@pytest.fixture
-def edits(lady_day_scenario):
-    def edit(title, original, new):
-        return FactEdit(
-            scenario_id=lady_day_scenario.scenario_id,
-            title=title,
-            page=1,
-            original_value=original,
-            new_value=new,
-            new_answer="another film",
-            model="test/model",
-        )
-
-    return [edit("Symphony in Black", "Billie Holiday", "Ella Fitzgerald"), edit("Billie Holiday", "Lady Day", "Lady Swing")]
-
-
 def make_injector(scenario, edits):
     app = MockApp(scenario)
     return app, FaultInjector(app, scenario, SilentlyWrong(edits), seed=0, episode_id="ep-1")
 
 
-def test_page_stays_valid_and_every_mention_is_swapped(lady_day_scenario, edits):
-    app, injector = make_injector(lady_day_scenario, edits)
+def test_page_stays_valid_and_every_mention_is_swapped(lady_day_scenario, lady_day_edits):
+    app, injector = make_injector(lady_day_scenario, lady_day_edits)
     clean = json.loads(app.call("get_article", SYMPHONY).text)
     corrupted_text = injector.call("get_article", SYMPHONY).text
 
@@ -58,8 +42,8 @@ def test_page_stays_valid_and_every_mention_is_swapped(lady_day_scenario, edits)
         assert corrupted[field] == clean[field]
 
 
-def test_fault_uses_the_edit_for_whichever_answer_page_comes_first(lady_day_scenario, edits):
-    _, injector = make_injector(lady_day_scenario, edits)
+def test_fault_uses_the_edit_for_whichever_answer_page_comes_first(lady_day_scenario, lady_day_edits):
+    _, injector = make_injector(lady_day_scenario, lady_day_edits)
     holiday = json.loads(injector.call("get_article", HOLIDAY).text)
     symphony = json.loads(injector.call("get_article", SYMPHONY).text)
 
@@ -67,9 +51,9 @@ def test_fault_uses_the_edit_for_whichever_answer_page_comes_first(lady_day_scen
     assert "Billie Holiday's screen debut" in symphony["sentences"][1]  # fault already used: clean
 
 
-def test_skipped_page_is_clean_and_the_fault_fires_on_the_next_answer_page(lady_day_scenario, edits):
-    skipped = edits[1].model_copy(update={"skip_reason": "nothing here affects the answer"})  # Billie Holiday page
-    app, injector = make_injector(lady_day_scenario, [edits[0], skipped])
+def test_skipped_page_is_clean_and_the_fault_fires_on_the_next_answer_page(lady_day_scenario, lady_day_edits):
+    skipped = lady_day_edits[1].model_copy(update={"skip_reason": "nothing here affects the answer"})  # Billie Holiday page
+    app, injector = make_injector(lady_day_scenario, [lady_day_edits[0], skipped])
 
     holiday = injector.call("get_article", HOLIDAY)
     symphony = json.loads(injector.call("get_article", SYMPHONY).text)
@@ -96,15 +80,15 @@ def test_committed_sample_edits_cover_every_answer_page(sample_scenarios):
             assert corrupted != app.call("get_article", args).text
 
 
-def test_retry_gets_the_clean_page(lady_day_scenario, edits):
-    app, injector = make_injector(lady_day_scenario, edits)
+def test_retry_gets_the_clean_page(lady_day_scenario, lady_day_edits):
+    app, injector = make_injector(lady_day_scenario, lady_day_edits)
     injector.call("get_article", SYMPHONY)
     assert injector.call("get_article", SYMPHONY) == app.call("get_article", SYMPHONY)
 
 
 @pytest.mark.anyio
-async def test_server_serves_the_edit_when_edits_are_loaded(lady_day_scenario, edits):
-    registry = EpisodeRegistry([lady_day_scenario], corruptors=build_corruptors(edits))
+async def test_server_serves_the_edit_when_edits_are_loaded(lady_day_scenario, lady_day_edits):
+    registry = EpisodeRegistry([lady_day_scenario], corruptors=build_corruptors(lady_day_edits))
     meta = {"x-episode-id": "ep-1", "x-scenario-id": lady_day_scenario.scenario_id}
     async with Client(build_server(registry)) as client:
         result = await client.call_tool("get_article", SYMPHONY, meta=meta)
@@ -113,11 +97,11 @@ async def test_server_serves_the_edit_when_edits_are_loaded(lady_day_scenario, e
     assert "Ella Fitzgerald's screen debut" in result.content[0].text
 
 
-def test_server_refuses_to_start_with_missing_edits(tmp_path, lady_day_scenario, edits):
+def test_server_refuses_to_start_with_missing_edits(tmp_path, lady_day_scenario, lady_day_edits):
     scenario_file = tmp_path / "scenarios.jsonl"
     edits_file = tmp_path / "edits.jsonl"
     write_jsonl([lady_day_scenario], scenario_file)
-    write_edits(edits[:1], edits_file)  # the Billie Holiday page has no edit
+    write_edits(lady_day_edits[:1], edits_file)  # the Billie Holiday page has no edit
 
     with pytest.raises(SystemExit, match="1 silently_wrong answer pages have no fact edit"):
         main(["--scenarios", str(scenario_file), "--edits", str(edits_file)])
