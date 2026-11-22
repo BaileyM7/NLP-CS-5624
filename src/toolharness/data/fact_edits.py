@@ -11,21 +11,20 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
-import os
 import re
 from pathlib import Path
 from typing import Callable, Iterable, Iterator, Literal, Sequence
 
-from dotenv import load_dotenv
-from openai import OpenAI
 from pydantic import BaseModel, ConfigDict
 
 from ..app.mock_app import MockApp
+from ..llm.client import LLMError, OpenRouterClient, openrouter_api_key
+from ..llm.models import FACT_EDIT_MODEL, MODELS
 from .scenario import FaultType, Scenario, read_jsonl
 
-DEFAULT_MODEL = "anthropic/claude-sonnet-5.5"  # outside the four models under test
-OPENROUTER_URL = "https://openrouter.ai/api/v1"
+DEFAULT_MODEL = MODELS[FACT_EDIT_MODEL].openrouter_id  # outside the four models under test
 MAX_ATTEMPTS = 3
 MAX_VALUE_CHARS = 80
 
@@ -283,9 +282,10 @@ def build_edits(
             edits.append(previous)
             continue
 
+        # A page that fails (bad replies or an API error after retries) is listed and the run continues
         try:
             edit = write_edit(scenario, app, title, page, complete, model, review, previous)
-        except EditRejected as error:
+        except (EditRejected, LLMError) as error:
             failures.append(str(error))
             print(f"FAILED  {error}", flush=True)
             continue
@@ -341,20 +341,20 @@ def read_reviews(path: str | Path) -> list[EditReview]:
 
 
 def openrouter_complete(model: str) -> Complete:
-    """A Complete function that sends prompts to `model` on OpenRouter (key from OPENROUTER_API_KEY)."""
-    load_dotenv()
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        raise SystemExit("OPENROUTER_API_KEY is not set. Copy .env.example to .env and add your key.")
-    client = OpenAI(base_url=OPENROUTER_URL, api_key=api_key)
+    """A Complete function that sends each prompt to `model` through the shared OpenRouter client."""
+    try:
+        api_key = openrouter_api_key()
+    except LLMError as error:
+        raise SystemExit(str(error)) from None
+
+    async def ask(prompt: str) -> str:
+        async with OpenRouterClient(api_key=api_key) as llm:
+            result = await llm.chat(model, [{"role": "user", "content": prompt}], tag="fact_edit")
+        return result.content or ""
 
     def complete(prompt: str) -> str:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-        )
-        return response.choices[0].message.content or ""
+        # A fresh client per prompt: an async client can't be reused across asyncio.run calls
+        return asyncio.run(ask(prompt))
 
     return complete
 
