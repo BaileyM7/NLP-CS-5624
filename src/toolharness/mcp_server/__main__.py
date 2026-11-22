@@ -30,7 +30,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--edits",
         nargs="+",
         default=[],
-        help="fact edit JSONL files; required to serve silently_wrong scenarios",
+        help="fact edit JSONL files; required to serve silently_wrong, stale and contradiction scenarios",
     )
     args = parser.parse_args(argv)
 
@@ -38,7 +38,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     for path in args.scenarios:
         scenarios.extend(read_jsonl(path))
 
-    # Without --edits, silently_wrong episodes are rejected; with it, every answer page must have an edit
+    # Without --edits, silently_wrong, stale and contradiction episodes are rejected; with it, every answer page needs an edit
     corruptors = CORRUPTORS
     if args.edits:
         fact_edits = read_edits(args.edits)

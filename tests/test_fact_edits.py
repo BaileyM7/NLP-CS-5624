@@ -2,6 +2,7 @@
 import json
 
 import pytest
+from fakes import fault_variant
 
 from toolharness.app.mock_app import MockApp
 from toolharness.data.fact_edits import (
@@ -114,6 +115,26 @@ def test_one_edit_per_answer_page_of_silently_wrong_scenarios_only(lady_day_scen
         ("Symphony in Black", 1, "Billie Holiday"),
     ]
     assert missing_edits([lady_day_scenario, clean], edits) == []
+
+
+def test_missing_edits_reports_a_shared_page_once_under_the_silently_wrong_id(lady_day_scenario, lady_day_edits):
+    stale = fault_variant(lady_day_scenario, FaultType.STALE)
+    contradiction = fault_variant(lady_day_scenario, FaultType.CONTRADICTION)
+    only_symphony = [e for e in lady_day_edits if e.title == "Symphony in Black"]
+
+    assert missing_edits([lady_day_scenario, stale, contradiction], only_symphony) == [
+        "hotpotqa-ladyday-silently_wrong 'Billie Holiday' page 1"
+    ]
+    assert missing_edits([stale, contradiction], lady_day_edits) == []
+
+
+def test_missing_edits_needs_only_the_edit_not_the_sibling_scenario(lady_day_scenario, lady_day_edits):
+    stale = fault_variant(lady_day_scenario, FaultType.STALE)
+    assert missing_edits([stale], lady_day_edits) == []
+    assert missing_edits([stale], []) == [
+        "hotpotqa-ladyday-silently_wrong 'Billie Holiday' page 1",
+        "hotpotqa-ladyday-silently_wrong 'Symphony in Black' page 1",
+    ]
 
 
 def test_rejected_reply_is_retried_with_the_reason(lady_day_scenario):

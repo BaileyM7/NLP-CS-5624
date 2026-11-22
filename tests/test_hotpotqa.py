@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from toolharness.data.hotpotqa import build_scenarios, is_usable, row_to_scenarios
-from toolharness.data.scenario import FaultType, read_jsonl, write_jsonl
+from toolharness.data.scenario import FaultType, fault_variant_id, make_scenario_id, read_jsonl, write_jsonl
 
 SAMPLE_FILE = Path(__file__).resolve().parents[1] / "data" / "sample" / "hotpotqa_sample.jsonl"
 
@@ -36,6 +36,12 @@ def test_row_expands_to_every_fault_condition():
     assert [s.fault_type for s in scenarios] == list(FaultType)
     assert len({s.scenario_id for s in scenarios}) == len(FaultType)
     assert {s.question_id for s in scenarios} == {"q0001"}
+
+
+def test_fault_variant_id_swaps_only_the_fault():
+    sw = make_scenario_id("longseal", "q-12", FaultType.SILENTLY_WRONG)
+    assert fault_variant_id(sw, FaultType.STALE) == make_scenario_id("longseal", "q-12", FaultType.STALE)
+    assert fault_variant_id(sw, FaultType.SILENTLY_WRONG) == sw
 
 
 def test_fault_targets_are_supporting_titles_in_order_without_duplicates():

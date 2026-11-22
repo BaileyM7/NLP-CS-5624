@@ -1,4 +1,5 @@
-"""Shared test helpers: a fake OpenRouter, chat-completion builders, the sample file and a free-port finder."""
+"""Shared test helpers: a fake OpenRouter, chat-completion builders, the sample file, a free-port finder
+and scenario fault variants."""
 import itertools
 import json
 import socket
@@ -6,6 +7,7 @@ from pathlib import Path
 
 import httpx2
 
+from toolharness.data.scenario import FaultType, Scenario, fault_variant_id
 from toolharness.llm.client import OpenRouterClient
 
 SAMPLE_FILE = Path(__file__).resolve().parents[1] / "data" / "sample" / "hotpotqa_sample.jsonl"
@@ -67,3 +69,8 @@ def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
+
+
+def fault_variant(scenario: Scenario, fault: FaultType) -> Scenario:
+    """The same question as `scenario`, under another fault type."""
+    return scenario.model_copy(update={"scenario_id": fault_variant_id(scenario.scenario_id, fault), "fault_type": fault})

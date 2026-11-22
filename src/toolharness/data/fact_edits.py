@@ -1,8 +1,8 @@
-"""Fact edits for the silently-wrong fault.
+"""Fact edits for the silently_wrong, stale and contradiction faults.
 
 For every answer page of every silently_wrong scenario, an LLM picks one fact the question depends on
 (an exact span of text) and a plausible wrong replacement. Edits are generated once and saved, so every
-model and condition sees the same edit.
+model and condition sees the same edit. The same question's stale and contradiction scenarios reuse them.
 
 Usage:
     python -m toolharness.data.fact_edits --scenarios data/scenarios/hotpotqa.jsonl --out data/edits/hotpotqa.jsonl
@@ -22,11 +22,12 @@ from pydantic import BaseModel, ConfigDict
 from ..app.mock_app import MockApp
 from ..llm.client import LLMError, OpenRouterClient, openrouter_api_key
 from ..llm.models import FACT_EDIT_MODEL, MODELS
-from .scenario import FaultType, Scenario, read_jsonl
+from .scenario import FaultType, Scenario, fault_variant_id, read_jsonl
 
 DEFAULT_MODEL = MODELS[FACT_EDIT_MODEL].openrouter_id  # outside the four models under test
 MAX_ATTEMPTS = 3
 MAX_VALUE_CHARS = 80
+EDIT_FAULTS = (FaultType.SILENTLY_WRONG, FaultType.STALE, FaultType.CONTRADICTION)  # faults that apply a fact edit
 
 Complete = Callable[[str], str]  # sends one prompt to an LLM and returns the reply text
 
@@ -298,12 +299,18 @@ def build_edits(
 
 
 def missing_edits(scenarios: Iterable[Scenario], edits: Iterable[FactEdit]) -> list[str]:
-    """Answer pages of silently_wrong scenarios that have no edit."""
+    """Answer pages that need an edit and have none, each listed once under its silently_wrong scenario ID."""
     have = {(e.scenario_id, e.title, e.page) for e in edits}
     missing = []
-    for scenario, _, title, page in pages_to_edit(scenarios):
-        if (scenario.scenario_id, title, page) not in have:
-            missing.append(f"{scenario.scenario_id} {title!r} page {page}")
+    for scenario in scenarios:
+        if scenario.fault_type not in EDIT_FAULTS:
+            continue
+        # Stale and contradiction scenarios use the edit of the same question's silently_wrong scenario
+        edit_scenario_id = fault_variant_id(scenario.scenario_id, FaultType.SILENTLY_WRONG)
+        for title, page in sorted(MockApp(scenario).answer_pages()):
+            message = f"{edit_scenario_id} {title!r} page {page}"
+            if (edit_scenario_id, title, page) not in have and message not in missing:
+                missing.append(message)
     return missing
 
 

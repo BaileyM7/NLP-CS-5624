@@ -11,7 +11,7 @@ python -m toolharness.agent --run-id pilot-1 --model haiku-5.5 --condition basel
     --scenarios data/scenarios/hotpotqa.jsonl --questions 5 --faults none hard_failure malformed silently_wrong
 ```
 - `--questions N`: only the first N questions of each scenario file. The files are already a seeded, stratified sample. With HotpotQA and LongSeal together, each gets N.
-- `--faults`: only these fault types. Leave out `stale` and `contradiction` until #12 and #13 land; their episodes fail at the first tool call.
+- `--faults`: only these fault types (default: all six). silently_wrong, stale and contradiction episodes need the server started with `--edits`, as above.
 - `--concurrency` (default 4) and `--seed` (default 0) are also available.
 - Run the same command again with `--model gpt-6-luna` to add a second model to the same run.
 - The command checks the server's `/health` first, and exits if the server isn't running.

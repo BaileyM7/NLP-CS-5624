@@ -8,6 +8,7 @@ import httpx2
 import pytest
 from fakes import free_port
 
+from toolharness.data.fact_edits import FactEdit
 from toolharness.data.scenario import Document, FaultType, Scenario, SupportingFact, read_jsonl
 
 SAMPLE_FILE = Path(__file__).resolve().parents[1] / "data" / "sample" / "hotpotqa_sample.jsonl"
@@ -101,3 +102,20 @@ def lady_day_scenario():
             Document(title="Duke Ellington", sentences=["Duke Ellington was an American composer."]),
         ],
     )
+
+
+@pytest.fixture
+def lady_day_edits(lady_day_scenario):
+    """Fact edits for both lady_day answer pages, keyed by its silently_wrong scenario ID."""
+    def edit(title, original, new):
+        return FactEdit(
+            scenario_id=lady_day_scenario.scenario_id,
+            title=title,
+            page=1,
+            original_value=original,
+            new_value=new,
+            new_answer="another film",
+            model="test/model",
+        )
+
+    return [edit("Symphony in Black", "Billie Holiday", "Ella Fitzgerald"), edit("Billie Holiday", "Lady Day", "Lady Swing")]
