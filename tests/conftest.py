@@ -1,7 +1,12 @@
 import datetime as dt
+import subprocess
+import sys
+import time
 from pathlib import Path
 
+import httpx2
 import pytest
+from fakes import free_port
 
 from toolharness.data.scenario import Document, FaultType, Scenario, SupportingFact, read_jsonl
 
@@ -18,6 +23,47 @@ def anyio_backend():
 def sample_scenarios():
     """The committed HotpotQA sample: 5 questions x 6 fault types."""
     return read_jsonl(SAMPLE_FILE)
+
+
+@pytest.fixture
+def http_server(tmp_path):
+    """Start the tool server on the sample as a subprocess on a free port; yield its base URL.
+
+    Its ground-truth log is tmp_path / "ground_truth.jsonl".
+    """
+    port = free_port()
+    log = open(tmp_path / "server.log", "w")
+    process = subprocess.Popen(
+        [
+            sys.executable, "-m", "toolharness.mcp_server",
+            "--scenarios", str(SAMPLE_FILE),
+            "--port", str(port),
+            "--gt-log", str(tmp_path / "ground_truth.jsonl"),
+        ],
+        stdout=log,
+        stderr=subprocess.STDOUT,
+    )
+    base_url = f"http://127.0.0.1:{port}"
+
+    # Wait until /health answers
+    deadline = time.time() + 30
+    while True:
+        try:
+            if httpx2.get(base_url + "/health", timeout=1).status_code == 200:
+                break
+        except httpx2.HTTPError:
+            pass
+        if time.time() > deadline or process.poll() is not None:
+            process.kill()
+            log.close()
+            pytest.fail("server did not start:\n" + (tmp_path / "server.log").read_text())
+        time.sleep(0.2)
+
+    yield base_url
+
+    process.terminate()
+    process.wait(timeout=10)
+    log.close()
 
 
 @pytest.fixture

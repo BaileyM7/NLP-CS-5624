@@ -220,10 +220,13 @@ class OpenRouterClient:
                 reason = f"HTTP {error.status_code}{detail}"
                 retry_after = retry_after_seconds(error.response)
             else:
-                if response.choices:
+                # OpenRouter can return status 200 with no choices, or with finish_reason "error" when the provider failed mid-reply
+                if not response.choices:
+                    reason = f"no choices in the response: {getattr(response, 'error', None)}"
+                elif response.choices[0].finish_reason == "error":
+                    reason = "the provider ended the reply with finish_reason=error"
+                else:
                     return response, (time.perf_counter() - start) * 1000, attempt
-                # OpenRouter can return status 200 with an error body and no choices
-                reason = f"no choices in the response: {getattr(response, 'error', None)}"
 
             if attempt == self.max_attempts:
                 raise LLMError(f"{request['model']}: gave up after {attempt} attempts ({reason})")

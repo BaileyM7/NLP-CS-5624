@@ -1,10 +1,6 @@
 """Tests for the MCP server: in-memory client tests plus one real HTTP smoke test."""
 import asyncio
 import json
-import socket
-import subprocess
-import sys
-import time
 from pathlib import Path
 
 import httpx2
@@ -120,51 +116,7 @@ def test_duplicate_scenario_ids_are_rejected(scenarios):
         EpisodeRegistry([scenarios[0], scenarios[0]])
 
 
-# Real HTTP server
-
-def free_port() -> int:
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
-
-
-@pytest.fixture
-def http_server(tmp_path):
-    """Start the server as a subprocess on a free port; yield its base URL."""
-    port = free_port()
-    log = open(tmp_path / "server.log", "w")
-    process = subprocess.Popen(
-        [
-            sys.executable, "-m", "toolharness.mcp_server",
-            "--scenarios", str(SAMPLE_FILE),
-            "--port", str(port),
-            "--gt-log", str(tmp_path / "ground_truth.jsonl"),
-        ],
-        stdout=log,
-        stderr=subprocess.STDOUT,
-    )
-    base_url = f"http://127.0.0.1:{port}"
-
-    # Wait until /health answers
-    deadline = time.time() + 30
-    while True:
-        try:
-            if httpx2.get(base_url + "/health", timeout=1).status_code == 200:
-                break
-        except httpx2.HTTPError:
-            pass
-        if time.time() > deadline or process.poll() is not None:
-            process.kill()
-            log.close()
-            pytest.fail("server did not start:\n" + (tmp_path / "server.log").read_text())
-        time.sleep(0.2)
-
-    yield base_url
-
-    process.terminate()
-    process.wait(timeout=10)
-    log.close()
-
+# Real HTTP server (the http_server fixture is in conftest.py)
 
 async def call_over_http(base_url, episode_id, scenario_id, tool, args):
     """One MCP tool call over HTTP, with the episode keys sent as headers."""

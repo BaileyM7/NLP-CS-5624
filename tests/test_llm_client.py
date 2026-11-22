@@ -3,8 +3,8 @@ import importlib.util
 import json
 from pathlib import Path
 
-import httpx2
 import pytest
+from fakes import FakeOpenRouter, completion, make_client
 from mcp import Client
 
 from toolharness.app.mock_app import MockApp
@@ -17,18 +17,6 @@ from toolharness.mcp_server.server import build_server
 
 MESSAGES = [{"role": "user", "content": 'Who was nicknamed "Lady Day"?'}]
 SEARCH_TOOL = {"type": "function", "function": {"name": "search", "description": "", "parameters": {"type": "object"}}}
-
-
-def completion(message, usage=None, finish_reason="stop"):
-    """An OpenAI-style chat completion body."""
-    return {
-        "id": "gen-1",
-        "object": "chat.completion",
-        "created": 0,
-        "model": "test",
-        "choices": [{"index": 0, "message": message, "finish_reason": finish_reason}],
-        "usage": usage or {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
-    }
 
 
 TOOL_CALL_REPLY = completion(
@@ -50,24 +38,6 @@ TOOL_CALL_REPLY = completion(
     },
     finish_reason="tool_calls",
 )
-
-
-class FakeOpenRouter:
-    """Answers requests with the queued (status, body) pairs in order and records each request body."""
-
-    def __init__(self, *responses):
-        self.responses = list(responses)
-        self.requests = []
-
-    def __call__(self, request):
-        self.requests.append(json.loads(request.content))
-        status, body = self.responses.pop(0)
-        return httpx2.Response(status, json=body)
-
-
-def make_client(fake, **kwargs):
-    http = httpx2.AsyncClient(transport=httpx2.MockTransport(fake))
-    return OpenRouterClient(api_key="test-key", http_client=http, base_delay=0, **kwargs)
 
 
 # Registry
@@ -156,6 +126,16 @@ async def test_reply_without_choices_is_retried():
     async with make_client(fake) as llm:
         result = await llm.chat("gpt-6-luna", MESSAGES)
     assert result.attempts == 2
+
+
+@pytest.mark.anyio
+async def test_reply_that_ended_in_a_provider_error_is_retried():
+    failed = completion({"role": "assistant", "content": None}, finish_reason="error")
+    fake = FakeOpenRouter((200, failed), (200, TOOL_CALL_REPLY))
+    async with make_client(fake) as llm:
+        result = await llm.chat("gpt-6-luna", MESSAGES)
+    assert result.attempts == 2
+    assert result.finish_reason == "tool_calls"
 
 
 @pytest.mark.anyio

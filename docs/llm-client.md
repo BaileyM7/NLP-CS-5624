@@ -48,7 +48,7 @@ Plus `result.latency_ms` (the successful attempt only) and `result.attempts`. Wi
 For the trace (`eval/trace.py`), the usage maps one to one: `TokenUsage(input_tokens=u.input_tokens, output_tokens=u.output_tokens, total_tokens=u.input_tokens + u.output_tokens)` and `cost_usd=u.cost_usd`.
 
 ## Retries
-- **Retried with exponential backoff** (up to 5 attempts, honoring `Retry-After`): 408/409/429/5xx, connection errors and timeouts, and OpenRouter's "200 with no choices" error replies. These are transport errors and never count as tool failures.
+- **Retried with exponential backoff** (up to 5 attempts, honoring `Retry-After`): 408/409/429/5xx, connection errors and timeouts, OpenRouter's "200 with no choices" error replies, and replies that end with `finish_reason="error"` (the provider failed mid-reply). These are transport errors and never count as tool failures.
 - **Raised as `LLMError`:** any other error, such as a 400 for a too-long context, or giving up after the last attempt.
 
 ## Things to know
