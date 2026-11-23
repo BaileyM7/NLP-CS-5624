@@ -43,6 +43,7 @@ The placeholder test should pass, confirming the package installs correctly.
 - [LLM client](docs/llm-client.md): model registry, OpenRouter client, cost tracking and the model smoke test.
 - [Agent runner](docs/agent-runner.md): running episodes and batches, budget rules, the thought argument, run files.
 - [Harness](docs/harness.md): the harness layer, the `_harness` line and its checks.
+- [Pilot](docs/pilot.md): running the pilot stages, the report and cost projection, and hand labeling.
 
 ## Project layout
 
