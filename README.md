@@ -42,6 +42,7 @@ The placeholder test should pass, confirming the package installs correctly.
 - [Tool server](docs/tool-server.md): local MCP server setup and tool interface.
 - [LLM client](docs/llm-client.md): model registry, OpenRouter client, cost tracking and the model smoke test.
 - [Agent runner](docs/agent-runner.md): running episodes and batches, budget rules, the thought argument, run files.
+- [Harness](docs/harness.md): the harness layer, the `_harness` line and its checks.
 
 ## Project layout
 
@@ -52,7 +53,7 @@ src/toolharness/
     mcp_server/ # MCP server exposing the tools
     injector/  # fault injector: corrupts scheduled tool responses
     llm/       # model registry + OpenRouter client (tool calls, retries, cost)
-    proxy/     # proxy utilities
+    harness/   # harness layer: checks each tool response and adds the _harness line
     agent/     # ReAct agent runner: episode loop, budget limits, batch runs
     eval/      # evaluation utilities
 tests/        # test suite

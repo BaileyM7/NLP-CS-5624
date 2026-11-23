@@ -23,21 +23,22 @@ def scenario(sample_scenarios):
 async def test_in_memory_session_lists_tools_and_calls_them(registry, scenario):
     async with InMemoryToolSession(build_server(registry), "e1", scenario.scenario_id, 0) as session:
         tools = await session.list_tools()
-        text, is_error = await session.call("search", {"query": scenario.question})
+        result = await session.call("search", {"query": scenario.question})
 
     assert {tool["function"]["name"] for tool in tools} == {"search", "get_article"}
-    assert not is_error
-    assert json.loads(text)["hits"]
+    assert not result.is_error
+    assert json.loads(result.text)["hits"]
+    assert result.harness_flags is None and result.proxy_latency_ms is None
     assert "e1" in registry.episodes
 
 
 @pytest.mark.anyio
 async def test_bad_arguments_come_back_as_a_tool_error(registry, scenario):
     async with InMemoryToolSession(build_server(registry), "e1", scenario.scenario_id, 0) as session:
-        text, is_error = await session.call("get_article", {"title": "X", "page": "two"})
-        assert is_error and "validation error" in text
-        text, is_error = await session.call("get_article", {})
-        assert is_error
+        result = await session.call("get_article", {"title": "X", "page": "two"})
+        assert result.is_error and "validation error" in result.text
+        result = await session.call("get_article", {})
+        assert result.is_error
 
 
 @pytest.mark.anyio

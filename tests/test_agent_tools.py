@@ -43,12 +43,10 @@ def test_verify_conditions_need_the_verify_instruction():
         system_prompt("harness")
 
 
-@pytest.mark.parametrize(
-    "condition, issue",
-    [("verify_prompt", "#21"), ("harness", "#17 and #21"), ("flags_only", "#17"), ("llm_verifier", "#29")],
-)
-def test_only_baseline_is_ready(condition, issue):
+@pytest.mark.parametrize("condition, issue", [("verify_prompt", "#21"), ("harness", "#21"), ("llm_verifier", "#29")])
+def test_baseline_and_flags_only_are_ready(condition, issue):
     require_ready("baseline")
+    require_ready("flags_only")
     with pytest.raises(ConditionNotReady, match=issue):
         require_ready(condition)
 

@@ -26,8 +26,9 @@ THOUGHT_DESCRIPTION = "One or two sentences: what you concluded from the previou
 
 FINAL_TURN_MESSAGE = "You have reached the limit for this question. Give your final answer now, ending with 'Final Answer: <short answer>'."
 
-# What each condition other than baseline still needs before it can run
-WAITING_ON = {"verify_prompt": "#21", "harness": "#17 and #21", "flags_only": "#17", "llm_verifier": "#29"}
+# Conditions that can run today, and what each of the others still needs
+READY = {"baseline", "flags_only"}
+WAITING_ON = {"verify_prompt": "#21", "harness": "#21", "llm_verifier": "#29"}
 
 
 class ConditionNotReady(Exception):
@@ -45,5 +46,5 @@ def system_prompt(condition: Condition) -> str:
 
 def require_ready(condition: Condition) -> None:
     """Raise ConditionNotReady unless the condition can run today."""
-    if condition != "baseline":
+    if condition not in READY:
         raise ConditionNotReady(f"condition {condition!r} needs {WAITING_ON[condition]}")

@@ -1,8 +1,9 @@
 """Tests for batch runs: scenario selection, episode IDs, resume, the run manifest and the command line."""
+import dataclasses
 import json
 
 import pytest
-from fakes import SAMPLE_FILE, FakeOpenRouter, answer_reply, free_port, make_client
+from fakes import SAMPLE_FILE, FakeOpenRouter, answer_reply, free_port, make_client, tool_reply
 
 from toolharness.agent.__main__ import main
 from toolharness.agent.batch import (
@@ -14,9 +15,11 @@ from toolharness.agent.batch import (
     run_batch,
     select_scenarios,
 )
+from toolharness.agent.runner import INVALID_ARGUMENTS
 from toolharness.agent.session import InMemoryToolSession
 from toolharness.data.scenario import FaultType
 from toolharness.eval.trace import read_jsonl, trace_filename
+from toolharness.harness.checks import HARNESS_CHECKS, harness_settings
 from toolharness.mcp_server.registry import EpisodeRegistry
 from toolharness.mcp_server.server import build_server
 
@@ -203,9 +206,9 @@ def test_manifest_accepts_the_same_scenario_file_under_another_path(config, tmp_
 # Command line
 
 def test_cli_refuses_a_condition_that_is_not_ready(capsys):
-    argv = ["--run-id", "r", "--model", "haiku-5.5", "--condition", "harness", "--scenarios", str(SAMPLE_FILE)]
+    argv = ["--run-id", "r", "--model", "haiku-5.5", "--condition", "llm_verifier", "--scenarios", str(SAMPLE_FILE)]
     assert main(argv) == 2
-    assert "#17" in capsys.readouterr().out
+    assert "#29" in capsys.readouterr().out
 
 
 def test_cli_stops_when_the_server_is_down(capsys):
@@ -213,3 +216,67 @@ def test_cli_stops_when_the_server_is_down(capsys):
     argv = ["--run-id", "r", "--model", "haiku-5.5", "--condition", "baseline", "--scenarios", str(SAMPLE_FILE), "--server-url", url]
     assert main(argv) == 2
     assert "not reachable" in capsys.readouterr().out
+
+
+# The harness layer (#17)
+
+SEARCH = (200, tool_reply(("search", {"thought": "Look it up.", "query": "Shin Hyun-joon"})))
+LINE = "\n\n_harness: "  # how the harness line starts in a tool response
+
+
+def only_call(config):
+    """The single tool call of the single episode in this config's trace file."""
+    [episode] = read_jsonl(trace_path(config))
+    [call] = episode.turns[0].tool_calls
+    return call
+
+
+@pytest.mark.anyio
+async def test_flags_only_episode_records_the_harness_line_and_fields(config, open_session):
+    config = dataclasses.replace(config, condition="flags_only", faults=[FaultType.NONE])
+    fake = FakeOpenRouter(SEARCH, ANSWER)
+    await batch(config, fake, open_session)
+
+    call = only_call(config)
+    assert call.raw_tool_response.count(LINE) == 1
+    assert json.loads(call.raw_tool_response.split(LINE)[1])["flags"] == []
+    assert call.harness_flags == []
+    assert call.proxy_latency_ms is not None
+    assert fake.requests[1]["messages"][-1]["content"] == call.raw_tool_response  # the model saw the line
+
+
+@pytest.mark.anyio
+async def test_baseline_episode_has_no_harness_fields(config, open_session):
+    config = dataclasses.replace(config, faults=[FaultType.NONE])
+    await batch(config, FakeOpenRouter(SEARCH, ANSWER), open_session)
+
+    call = only_call(config)
+    assert "_harness" not in call.raw_tool_response
+    assert call.harness_flags is None
+    assert call.proxy_latency_ms is None
+
+
+@pytest.mark.anyio
+async def test_runner_made_results_get_no_line(config, open_session):
+    config = dataclasses.replace(config, condition="flags_only", faults=[FaultType.NONE])
+    await batch(config, FakeOpenRouter((200, tool_reply(("search", "not json"))), ANSWER), open_session)
+
+    call = only_call(config)
+    assert call.raw_tool_response == INVALID_ARGUMENTS
+    assert call.harness_flags is None
+
+
+def test_manifest_records_harness_settings(config):
+    settings = harness_settings("flags_only")
+    assert manifest_entry(dataclasses.replace(config, condition="flags_only"))["harness"] == settings
+    assert settings["checks"] == [check.key for check in HARNESS_CHECKS]
+    assert settings["line_prefix"] == "_harness: "
+    assert manifest_entry(config)["harness"] is None
+
+
+def test_changed_harness_settings_block_a_resume(tmp_path, config):
+    entry = manifest_entry(dataclasses.replace(config, condition="flags_only"))
+    check_manifest(tmp_path / "manifest.json", entry)
+    changed = dict(entry, harness={**entry["harness"], "checks": ["something_else"]})
+    with pytest.raises(ManifestMismatch, match="harness"):
+        check_manifest(tmp_path / "manifest.json", changed)

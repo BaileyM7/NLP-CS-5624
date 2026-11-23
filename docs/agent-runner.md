@@ -49,7 +49,7 @@ Every tool the model sees has a required `thought` argument: one or two sentence
 - **The judge (#23) sees only visible text.** Many models, especially the GPT models, send tool calls with no text and keep their reasoning hidden.
 - **#21 needs a visible reflection on every turn.**
 
-The runner strips `thought` before calling the server, so the tool server and proxy never see it. It is saved in the turn's `assistant_text` as `Thought: ...`, after any text the model wrote.
+The runner strips `thought` before calling the server, so the tool server and the harness checks never see it. It is saved in the turn's `assistant_text` as `Thought: ...`, after any text the model wrote.
 
 ## Conditions
 | Condition | System prompt | Status |
@@ -57,12 +57,13 @@ The runner strips `thought` before calling the server, so the tool server and pr
 | `baseline` | `BASE_PROMPT` | ready |
 | `verify_prompt` | `BASE_PROMPT` + verification instruction | needs #21 |
 | `llm_verifier` | `BASE_PROMPT` | needs #29 |
-| `harness` | `BASE_PROMPT` + verification instruction | needs #17 and #21 |
-| `flags_only` | `BASE_PROMPT` | needs #17 |
+| `harness` | `BASE_PROMPT` + verification instruction, plus `_harness` lines | needs #21 |
+| `flags_only` | `BASE_PROMPT`, plus `_harness` lines | ready |
 
 - **`BASE_PROMPT`** is in `agent/prompts.py`. It states today's date (November 1, 2026, the mock app's "now") and never mentions faults.
 - **#21:** write the instruction into `VERIFY_INSTRUCTION` in `agent/prompts.py`, and add the conditions it enables to `require_ready`.
-- **#17 / #29:** the trace fields `harness_flags`, `verifier_output` and `proxy_latency_ms` are `None` for now. Fill them when the proxy's `_harness` / `_verifier` blocks exist, and point `--server-url` at the proxy.
+- **Harness conditions:** `harness` and `flags_only` turn on the harness layer automatically; no extra server or URL is needed. Their trace fields `harness_flags` and `proxy_latency_ms` are filled; see [the harness doc](harness.md).
+- **#29:** `verifier_output` stays `None` until the LLM verifier exists.
 
 ## Resume and episode IDs
 Episode IDs look like `<run-id>__<model>__<condition>__<scenario-id>__s<seed>__a<attempt>`.

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import AsyncExitStack, contextmanager
+from dataclasses import dataclass
 from typing import Any, Iterator, Protocol
 
 import httpx2
@@ -42,10 +43,20 @@ def server_errors() -> Iterator[None]:
         raise wrapped from error
 
 
+@dataclass(frozen=True)
+class ToolResult:
+    """One tool response as the model receives it; the harness fields are set only when the harness layer ran."""
+
+    text: str
+    is_error: bool
+    harness_flags: list[str] | None = None
+    proxy_latency_ms: float | None = None
+
+
 class ToolSession(Protocol):
     async def list_tools(self) -> list[dict]: ...
 
-    async def call(self, name: str, args: dict[str, Any]) -> tuple[str, bool]: ...
+    async def call(self, name: str, args: dict[str, Any]) -> ToolResult: ...
 
 
 def episode_headers(episode_id: str, scenario_id: str, seed: int) -> dict[str, str]:
@@ -83,12 +94,12 @@ class _McpSession:
             result = await self.client.list_tools()
         return tools_from_mcp(result.tools)
 
-    async def call(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
+    async def call(self, name: str, args: dict[str, Any]) -> ToolResult:
         """Run one tool call; returns the response text and whether it is an error result."""
         with server_errors():
             result = await self.client.call_tool(name, args, meta=self.meta)
         text = result.content[0].text if result.content else ""
-        return text, result.is_error
+        return ToolResult(text=text, is_error=result.is_error)
 
 
 class HttpToolSession(_McpSession):
