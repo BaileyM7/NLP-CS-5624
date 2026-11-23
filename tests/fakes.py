@@ -1,5 +1,5 @@
-"""Shared test helpers: a fake OpenRouter, chat-completion builders, the sample file, a free-port finder
-and scenario fault variants."""
+"""Shared test helpers: a fake OpenRouter, chat-completion builders, the sample file, a free-port finder,
+scenario fault variants, and fake episodes and run folders."""
 import itertools
 import json
 import socket
@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx2
 
 from toolharness.data.scenario import FaultType, Scenario, fault_variant_id
+from toolharness.eval.trace import Episode, EpisodeTotals, ToolCallTrace, Turn, append_jsonl, trace_filename
 from toolharness.llm.client import OpenRouterClient
 
 SAMPLE_FILE = Path(__file__).resolve().parents[1] / "data" / "sample" / "hotpotqa_sample.jsonl"
@@ -74,3 +75,61 @@ def free_port() -> int:
 def fault_variant(scenario: Scenario, fault: FaultType) -> Scenario:
     """The same question as `scenario`, under another fault type."""
     return scenario.model_copy(update={"scenario_id": fault_variant_id(scenario.scenario_id, fault), "fault_type": fault})
+
+
+def make_episode(model, condition, dataset, fault, *, cost=0.0, scenario="q1", question="Q?", final="x", gold="x", calls=(), run="r"):
+    """A finished episode. `calls` are (tool, raw response, harness flags) made in turn 1; the last turn answers."""
+    scenario_id = f"{dataset}-{scenario}-{fault}"
+    turns = []
+    if calls:
+        tool_calls = []
+        for tool, raw, flags in calls:
+            tool_calls.append(ToolCallTrace(tool_name=tool, tool_args={"query": "q"}, raw_tool_response=raw, harness_flags=flags))
+        turns.append(Turn(index=1, assistant_text="Thought: look it up.", tool_calls=tool_calls))
+    turns.append(Turn(index=len(turns) + 1, assistant_text=f"Final Answer: {final}"))
+    return Episode(
+        episode_id=f"{run}__{model}__{condition}__{scenario_id}__s0__a1",
+        scenario_id=scenario_id,
+        dataset=dataset,
+        model=model,
+        condition=condition,
+        fault_type=FaultType(fault),
+        question=question,
+        final_answer=final,
+        gold_answer=gold,
+        stop_reason="final_answer",
+        totals=EpisodeTotals(agent_cost_usd=cost),
+        turns=turns,
+    )
+
+
+def gt_row(episode, call_index, tool, corrupted=False, original=None, corrupted_text=None):
+    """One ground-truth log row, in the format the fault injector writes."""
+    return {
+        "episode_id": episode.episode_id,
+        "scenario_id": episode.scenario_id,
+        "fault_type": episode.fault_type.value,
+        "call_index": call_index,
+        "tool": tool,
+        "args": {},
+        "corrupted": corrupted,
+        "retry_of_corrupted": False,
+        "original": original,
+        "corrupted_text": corrupted_text,
+        "corrupted_is_error": False if corrupted else None,
+    }
+
+
+def write_run(run_dir, episodes, gt_rows=(), errors=()):
+    """Write a run folder the way the batch runner and the tool server do; returns run_dir."""
+    run_dir = Path(run_dir)
+    for episode in episodes:
+        append_jsonl(episode, run_dir / "traces" / trace_filename(episode.model, episode.condition))
+    run_dir.mkdir(parents=True, exist_ok=True)
+    with (run_dir / "ground_truth.jsonl").open("w", encoding="utf-8") as stream:
+        for row in gt_rows:
+            stream.write(json.dumps(row) + "\n")
+    with (run_dir / "errors.jsonl").open("w", encoding="utf-8") as stream:
+        for row in errors:
+            stream.write(json.dumps(row) + "\n")
+    return run_dir

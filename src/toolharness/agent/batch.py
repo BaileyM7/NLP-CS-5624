@@ -26,6 +26,8 @@ from ..data.scenario import FaultType, Scenario
 from ..data.scenario import read_jsonl as read_scenarios
 from ..eval.trace import Condition, append_jsonl, trace_filename
 from ..eval.trace import read_jsonl as read_episodes
+from ..harness.checks import HARNESS_CHECKS, HARNESS_CONDITIONS, harness_settings
+from ..harness.session import HarnessSession
 from ..llm.client import OpenRouterClient
 from ..llm.models import get_model
 from .prompts import FINAL_TURN_MESSAGE, THOUGHT_DESCRIPTION, system_prompt
@@ -45,6 +47,7 @@ EXPERIMENT_FIELDS = (
     "budget",
     "seed",
     "scenario_hashes",
+    "harness",
 )
 
 
@@ -132,6 +135,7 @@ def manifest_entry(config: BatchConfig) -> dict:
         "reasoning": REASONING,
         "budget": dataclasses.asdict(Budget()),
         "seed": config.seed,
+        "harness": harness_settings(config.condition),
         "scenario_hashes": sorted(hashes.values()),  # compared on resume, whatever the paths were called
         "scenario_files": hashes,  # recorded only
         "git_commit": commit,
@@ -237,7 +241,11 @@ async def run_batch(
 
             # Any failure ends only this episode: it is logged and retried on the next run
             try:
-                async with open_session(episode_id, scenario.scenario_id, config.seed) as session:
+                session = open_session(episode_id, scenario.scenario_id, config.seed)
+                # Harness conditions check every tool response before the model sees it
+                if config.condition in HARNESS_CONDITIONS:
+                    session = HarnessSession(session, HARNESS_CHECKS)
+                async with session:
                     episode = await run_episode(llm, session, scenario, config.model, config.condition, episode_id)
             except Exception as error:
                 message = f"{type(error).__name__}: {error}"

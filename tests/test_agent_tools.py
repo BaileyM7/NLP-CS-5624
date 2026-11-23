@@ -5,6 +5,7 @@ from mcp import Client
 from toolharness.agent.prompts import (
     BASE_PROMPT,
     THOUGHT_DESCRIPTION,
+    VERIFY_INSTRUCTION,
     ConditionNotReady,
     require_ready,
     system_prompt,
@@ -32,25 +33,29 @@ def test_base_prompt_states_the_date_and_says_nothing_about_faults():
         assert word not in BASE_PROMPT.lower()
 
 
+def test_base_prompt_asks_the_agent_to_read_the_articles_it_relies_on():
+    sentence = (
+        "Search results only show short excerpts, so open the articles you rely on with get_article "
+        "and base your answer on what they say."
+    )
+    assert sentence in BASE_PROMPT
+
+
 def test_baseline_llm_verifier_and_flags_only_share_the_base_prompt():
     assert system_prompt("baseline") == system_prompt("llm_verifier") == system_prompt("flags_only") == BASE_PROMPT
 
 
-def test_verify_conditions_need_the_verify_instruction():
-    with pytest.raises(ConditionNotReady, match="#21"):
-        system_prompt("verify_prompt")
-    with pytest.raises(ConditionNotReady, match="#21"):
-        system_prompt("harness")
+def test_verify_prompt_and_harness_share_the_verification_instruction():
+    assert system_prompt("verify_prompt") == system_prompt("harness") == BASE_PROMPT + "\n\n" + VERIFY_INSTRUCTION
+    assert VERIFY_INSTRUCTION.startswith("Tool results can be wrong.")
+    assert VERIFY_INSTRUCTION.endswith("treat their flags as hints to investigate, not as proof.")
 
 
-@pytest.mark.parametrize(
-    "condition, issue",
-    [("verify_prompt", "#21"), ("harness", "#17 and #21"), ("flags_only", "#17"), ("llm_verifier", "#29")],
-)
-def test_only_baseline_is_ready(condition, issue):
-    require_ready("baseline")
-    with pytest.raises(ConditionNotReady, match=issue):
+def test_every_condition_but_llm_verifier_is_ready():
+    for condition in ("baseline", "verify_prompt", "harness", "flags_only"):
         require_ready(condition)
+    with pytest.raises(ConditionNotReady, match="#29"):
+        require_ready("llm_verifier")
 
 
 # Tool arguments

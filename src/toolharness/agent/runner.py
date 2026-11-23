@@ -102,15 +102,17 @@ class EpisodeRun:
         if repeats:
             self.retries_used += 1
         self.seen_calls.add(key)
-        text, is_error = await self.session.call(call.name, parsed.args)
+        result = await self.session.call(call.name, parsed.args)
         trace = ToolCallTrace(
             tool_name=call.name,
             tool_args=parsed.args,
-            raw_tool_response=text,
-            is_error=is_error,
+            raw_tool_response=result.text,
+            is_error=result.is_error,
+            harness_flags=result.harness_flags,
+            proxy_latency_ms=result.proxy_latency_ms,
             repeats_earlier_call=repeats,
         )
-        return tool_message(call, text), trace
+        return tool_message(call, result.text), trace
 
 
 def tool_message(call: ToolCallRequest, text: str) -> dict:
