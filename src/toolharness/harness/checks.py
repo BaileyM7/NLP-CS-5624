@@ -1,33 +1,18 @@
-"""Harness checks: what each check returns, which checks run, and which conditions use them."""
+"""Which harness checks run, which conditions use them, and the settings recorded in the run manifest."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Protocol
+from .base import Check, CheckResult
+from .format_check import FormatCheck
 
-from ..agent.session import ToolResult
+__all__ = ["Check", "CheckResult", "HARNESS_CHECKS", "HARNESS_CONDITIONS", "LINE_PREFIX", "harness_settings"]
 
 # Conditions whose tool responses go through the harness layer
 HARNESS_CONDITIONS = ("harness", "flags_only")
 
 LINE_PREFIX = "_harness: "
 
-
-@dataclass(frozen=True)
-class CheckResult:
-    value: bool | None  # True = passed, False = failed, None = the check doesn't apply to this response
-    flags: list[str]  # short reasons shown to the model; empty when passed
-
-
-class Check(Protocol):
-    key: str  # the check's key in the _harness line, e.g. "schema_valid"
-
-    def run(self, tool: str, result: ToolResult, history: list[tuple[str, ToolResult]]) -> CheckResult:
-        """Check one raw tool response; history holds this episode's earlier (tool, raw response) pairs."""
-        ...
-
-
 # The checks the harness runs, in the order they appear in the _harness line
-HARNESS_CHECKS: list[Check] = []
+HARNESS_CHECKS: list[Check] = [FormatCheck()]
 
 
 def harness_settings(condition: str) -> dict | None:

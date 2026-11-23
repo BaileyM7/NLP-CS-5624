@@ -30,6 +30,22 @@ _harness: {"schema_valid": true, "fresh": false, "flags": ["stale: last updated 
 - **Frozen settings.** The run manifest's `harness` field records the check list and the line prefix, so a resumed run must use the same harness.
 
 ## Checks
-A check implements `key`, plus `run(tool, result, history) -> CheckResult(value, flags)` (`harness/checks.py`). To add one, append it to `HARNESS_CHECKS`; its key then joins the line and the manifest.
+A check implements `key`, plus `run(tool, result, history) -> CheckResult(value, flags)` (`harness/base.py`). To add one, append it to `HARNESS_CHECKS` in `harness/checks.py`; its key then joins the line and the manifest.
 
-No checks are registered yet; the format (#18) and freshness (#19) checks follow.
+### Format (`schema_valid`, #18)
+Does the response match the tool's own output model (`app/backend.py`)? A `search` response should match `SearchResult`. A `get_article` response should match `NotFound` when it says `"error": "not_found"`, and `ArticlePage` otherwise. Tools other than these two get `null`.
+
+| Response | Flag |
+|---|---|
+| An error result | `format: the tool returned an error` |
+| Not JSON (an HTML page, cut-off text) | `format: not valid JSON` |
+| JSON that isn't an object | `format: expected a JSON object` |
+| A required field is missing | `format: missing field 'sentences'` (nested fields as `hits.0.snippet`) |
+| A field has the wrong type | `format: field 'sentences' has the wrong type` |
+
+- **Fault coverage.** It flags every hard_failure (#9) and malformed (#10) variant.
+- **No false flags.** It never flags a clean response: searches, pages and not-found results.
+- **Scope.** It can't catch silently_wrong, stale or contradiction pages, which are valid JSON.
+- **A flag isn't always a fault.** Bad tool arguments also come back as error results, so they get flagged too. A flag is a suspicion signal, not proof of a fault.
+
+The freshness check (#19) follows.
