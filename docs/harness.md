@@ -48,4 +48,12 @@ Does the response match the tool's own output model (`app/backend.py`)? A `searc
 - **Scope.** It can't catch silently_wrong, stale or contradiction pages, which are valid JSON.
 - **A flag isn't always a fault.** Bad tool arguments also come back as error results, so they get flagged too. A flag is a suspicion signal, not proof of a fault.
 
-The freshness check (#19) follows.
+### Freshness (`fresh`, #19)
+Is an article page's `last_updated` more than **365 days** before today (AS_OF, Nov 1, 2026, which the system prompt also states)?
+- **Flag:** `stale: last updated 2021-03-04, more than 1 year before today (2026-11-01)`.
+- **When it applies:** only to a valid `get_article` page. Searches, not-found results, error results and broken pages get `null`.
+- **Fault coverage.** It flags every stale fault (#12), because those are always at least 3 years older than the page's real date.
+- **HotpotQA clean pages are never flagged.** They're dated within 90 days of AS_OF.
+- **LongSeal clean pages often are.** They keep their real dates, and 41% of them (27% of LongSeal answer pages) are more than a year old. That's a realistic false-alarm test, and the pilot report measures it.
+- **Why 1 year.** It's a common rule of thumb, chosen without reference to the stale fault's 3–6 years. With a 2-year window, LongSeal false flags would drop to 23% (4% of answer pages).
+- **Frozen.** The window is recorded in the manifest as `freshness_days`.
