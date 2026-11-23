@@ -33,6 +33,14 @@ def test_base_prompt_states_the_date_and_says_nothing_about_faults():
         assert word not in BASE_PROMPT.lower()
 
 
+def test_base_prompt_asks_the_agent_to_read_the_articles_it_relies_on():
+    sentence = (
+        "Search results only show short excerpts, so open the articles you rely on with get_article "
+        "and base your answer on what they say."
+    )
+    assert sentence in BASE_PROMPT
+
+
 def test_baseline_llm_verifier_and_flags_only_share_the_base_prompt():
     assert system_prompt("baseline") == system_prompt("llm_verifier") == system_prompt("flags_only") == BASE_PROMPT
 

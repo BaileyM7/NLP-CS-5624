@@ -13,7 +13,7 @@ DATE_LINE = f"Today's date is {AS_OF:%B} {AS_OF.day}, {AS_OF.year}."
 BASE_PROMPT = f"""You answer questions by looking things up with the search and get_article tools.
 {DATE_LINE}
 
-Use the tools to look up the facts you need before answering. Every tool call has a "thought" argument: in one or two sentences, say what you concluded from the previous result and why you are making this call.
+Use the tools to look up the facts you need before answering. Search results only show short excerpts, so open the articles you rely on with get_article and base your answer on what they say. Every tool call has a "thought" argument: in one or two sentences, say what you concluded from the previous result and why you are making this call.
 
 When you are ready to answer, reply without calling a tool and end your reply with:
 Final Answer: <short answer>
