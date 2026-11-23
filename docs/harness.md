@@ -7,6 +7,8 @@ The harness checks every tool response before the model sees it, and tells the m
 | `harness` | yes | yes |
 | `flags_only` | yes | no |
 
+The verification prompt is `VERIFY_INSTRUCTION` (`agent/prompts.py`), the same text the `verify_prompt` condition uses. It mentions `_harness` checks in a way that also reads naturally when there are none.
+
 ## Where it runs
 The harness is a layer inside the agent runner (`src/toolharness/harness/`). It sits between the MCP tools and the model, rather than being a separate MCP server.
 - **How it's switched on.** `run_batch` wraps each episode's tool session in a `HarnessSession` when the condition is `harness` or `flags_only`. There is no extra process or URL, so a harness run can't accidentally run without it.

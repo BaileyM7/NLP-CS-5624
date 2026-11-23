@@ -19,16 +19,22 @@ When you are ready to answer, reply without calling a tool and end your reply wi
 Final Answer: <short answer>
 Keep the short answer as short as possible: a name, a date, a number, or yes/no, with no explanation."""
 
-# The verification instruction for verify_prompt and harness; written in #21
-VERIFY_INSTRUCTION: str | None = None
+# Added to BASE_PROMPT for verify_prompt and harness: check each tool result before relying on it (#21)
+VERIFY_INSTRUCTION = (
+    "Tool results can be wrong. Before you rely on a result, check it: is it an error, garbled or incomplete, "
+    "out of date, or in conflict with something you saw earlier? Start each thought with that check in one short "
+    "sentence, then say what you will do next. If a result looks unreliable, don't build on it: fetch it again or "
+    "confirm it from another source first. Some results end with automatic _harness checks; treat their flags as "
+    "hints to investigate, not as proof."
+)
 
 THOUGHT_DESCRIPTION = "One or two sentences: what you concluded from the previous result, and why you are making this call."
 
 FINAL_TURN_MESSAGE = "You have reached the limit for this question. Give your final answer now, ending with 'Final Answer: <short answer>'."
 
 # Conditions that can run today, and what each of the others still needs
-READY = {"baseline", "flags_only"}
-WAITING_ON = {"verify_prompt": "#21", "harness": "#21", "llm_verifier": "#29"}
+READY = {"baseline", "verify_prompt", "harness", "flags_only"}
+WAITING_ON = {"llm_verifier": "#29"}
 
 
 class ConditionNotReady(Exception):
@@ -38,8 +44,6 @@ class ConditionNotReady(Exception):
 def system_prompt(condition: Condition) -> str:
     """The system prompt for a condition: the base prompt, plus the verification instruction where the spec adds it."""
     if condition in ("verify_prompt", "harness"):
-        if VERIFY_INSTRUCTION is None:
-            raise ConditionNotReady(f"condition {condition!r} needs {WAITING_ON[condition]} (verification prompt not written yet)")
         return BASE_PROMPT + "\n\n" + VERIFY_INSTRUCTION
     return BASE_PROMPT
 

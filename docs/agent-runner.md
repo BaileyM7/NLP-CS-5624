@@ -55,13 +55,13 @@ The runner strips `thought` before calling the server, so the tool server and th
 | Condition | System prompt | Status |
 |---|---|---|
 | `baseline` | `BASE_PROMPT` | ready |
-| `verify_prompt` | `BASE_PROMPT` + verification instruction | needs #21 |
+| `verify_prompt` | `BASE_PROMPT` + verification instruction | ready |
 | `llm_verifier` | `BASE_PROMPT` | needs #29 |
-| `harness` | `BASE_PROMPT` + verification instruction, plus `_harness` lines | needs #21 |
+| `harness` | `BASE_PROMPT` + verification instruction, plus `_harness` lines | ready |
 | `flags_only` | `BASE_PROMPT`, plus `_harness` lines | ready |
 
 - **`BASE_PROMPT`** is in `agent/prompts.py`. It states today's date (November 1, 2026, the mock app's "now") and never mentions faults.
-- **#21:** write the instruction into `VERIFY_INSTRUCTION` in `agent/prompts.py`, and add the conditions it enables to `require_ready`.
+- **Verification instruction (#21):** `VERIFY_INSTRUCTION` in `agent/prompts.py`. It asks the model to check every tool result before relying on it, and to start each thought with that check. `verify_prompt` and `harness` use the identical text, so comparing them isolates the effect of the `_harness` flags. It's frozen experiment text, recorded in the manifest's `system_prompt`.
 - **Harness conditions:** `harness` and `flags_only` turn on the harness layer automatically; no extra server or URL is needed. Their trace fields `harness_flags` and `proxy_latency_ms` are filled; see [the harness doc](harness.md).
 - **#29:** `verifier_output` stays `None` until the LLM verifier exists.
 
