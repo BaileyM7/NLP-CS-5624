@@ -33,8 +33,8 @@ THOUGHT_DESCRIPTION = "One or two sentences: what you concluded from the previou
 FINAL_TURN_MESSAGE = "You have reached the limit for this question. Give your final answer now, ending with 'Final Answer: <short answer>'."
 
 # Conditions that can run today, and what each of the others still needs
-READY = {"baseline", "verify_prompt", "harness", "flags_only"}
-WAITING_ON = {"llm_verifier": "#29"}
+READY = {"baseline", "verify_prompt", "llm_verifier", "harness", "flags_only"}
+WAITING_ON: dict[str, str] = {}
 
 
 class ConditionNotReady(Exception):

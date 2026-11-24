@@ -205,12 +205,6 @@ def test_manifest_accepts_the_same_scenario_file_under_another_path(config, tmp_
 
 # Command line
 
-def test_cli_refuses_a_condition_that_is_not_ready(capsys):
-    argv = ["--run-id", "r", "--model", "haiku-5.5", "--condition", "llm_verifier", "--scenarios", str(SAMPLE_FILE)]
-    assert main(argv) == 2
-    assert "#29" in capsys.readouterr().out
-
-
 def test_cli_stops_when_the_server_is_down(capsys):
     url = f"http://127.0.0.1:{free_port()}/mcp"
     argv = ["--run-id", "r", "--model", "haiku-5.5", "--condition", "baseline", "--scenarios", str(SAMPLE_FILE), "--server-url", url]

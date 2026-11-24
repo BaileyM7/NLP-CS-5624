@@ -10,6 +10,7 @@ from mcp import Client, MCPError
 from mcp.client.streamable_http import streamable_http_client
 from mcp.server.mcpserver import MCPServer
 
+from ..eval.trace import TokenUsage, VerifierOutput
 from ..llm.client import tools_from_mcp
 
 
@@ -51,6 +52,10 @@ class ToolResult:
     is_error: bool
     harness_flags: list[str] | None = None
     proxy_latency_ms: float | None = None
+    verifier_output: VerifierOutput | None = None
+    verifier_tokens: TokenUsage | None = None
+    verifier_cost_usd: float | None = None
+    verifier_latency_ms: float | None = None
 
 
 class ToolSession(Protocol):

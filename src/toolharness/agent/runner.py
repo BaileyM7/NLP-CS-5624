@@ -61,9 +61,14 @@ def episode_totals(turns: list[Turn], latency_ms: float) -> EpisodeTotals:
     """The agent's summed tokens and cost; latency is the episode's wall-clock time."""
     input_tokens = sum(turn.totals.tokens.input_tokens for turn in turns)
     output_tokens = sum(turn.totals.tokens.output_tokens for turn in turns)
+    calls = [call for turn in turns for call in turn.tool_calls]
+    verifier_input = sum(call.verifier_tokens.input_tokens for call in calls if call.verifier_tokens is not None)
+    verifier_output = sum(call.verifier_tokens.output_tokens for call in calls if call.verifier_tokens is not None)
     return EpisodeTotals(
         agent_tokens=TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens, total_tokens=input_tokens + output_tokens),
         agent_cost_usd=sum(turn.totals.cost_usd for turn in turns),
+        verifier_tokens=TokenUsage(input_tokens=verifier_input, output_tokens=verifier_output, total_tokens=verifier_input + verifier_output),
+        verifier_cost_usd=sum(call.verifier_cost_usd for call in calls if call.verifier_cost_usd is not None),
         latency_ms=latency_ms,
     )
 
@@ -110,6 +115,10 @@ class EpisodeRun:
             is_error=result.is_error,
             harness_flags=result.harness_flags,
             proxy_latency_ms=result.proxy_latency_ms,
+            verifier_output=result.verifier_output,
+            verifier_tokens=result.verifier_tokens,
+            verifier_cost_usd=result.verifier_cost_usd,
+            verifier_latency_ms=result.verifier_latency_ms,
             repeats_earlier_call=repeats,
         )
         return tool_message(call, result.text), trace

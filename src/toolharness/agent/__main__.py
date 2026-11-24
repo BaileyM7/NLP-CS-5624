@@ -71,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"ran {summary.ran}, skipped {summary.skipped} (already done), errored {summary.errored}")
     print("stop reasons: " + ", ".join(f"{reason} {count}" for reason, count in summary.stop_reasons.most_common()))
     print(f"agent cost ${summary.cost_usd:.5f}")
+    if config.condition == "llm_verifier":
+        print(f"verifier cost ${summary.verifier_cost_usd:.5f}")
     if summary.errored:
         print(f"Errors are in {config.run_dir / 'errors.jsonl'}. Rerun the same command to retry failed episodes.")
         return 1

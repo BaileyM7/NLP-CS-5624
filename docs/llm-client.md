@@ -33,7 +33,7 @@ async with OpenRouterClient(usage_log="runs/<run-id>/llm_usage.jsonl") as llm:
 ```
 - **Append `result.message` unchanged.** It carries the model's reasoning details, which OpenRouter needs back on the next turn.
 - **`call.arguments` is the raw string the model wrote.** Parsing it, and handling bad JSON, is the caller's job.
-- **Optional `chat()` arguments:** `tool_choice`, `max_tokens`, and `reasoning` (OpenRouter's settings, e.g. `{"effort": "low"}`; `None` keeps each model's default).
+- **Optional `chat()` arguments:** `tool_choice`, `max_tokens`, `response_format` (for structured output), and `reasoning` (OpenRouter's settings, e.g. `{"effort": "low"}`; `None` keeps each model's default).
 
 ## What every call records
 `result.usage`:

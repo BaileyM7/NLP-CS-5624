@@ -56,14 +56,15 @@ The runner strips `thought` before calling the server, so the tool server and th
 |---|---|---|
 | `baseline` | `BASE_PROMPT` | ready |
 | `verify_prompt` | `BASE_PROMPT` + verification instruction | ready |
-| `llm_verifier` | `BASE_PROMPT` | needs #29 |
+| `llm_verifier` | `BASE_PROMPT`, plus `_verifier` lines | ready |
 | `harness` | `BASE_PROMPT` + verification instruction, plus `_harness` lines | ready |
 | `flags_only` | `BASE_PROMPT`, plus `_harness` lines | ready |
 
 - **`BASE_PROMPT`** is in `agent/prompts.py`. It states today's date (November 1, 2026, the mock app's "now") and never mentions faults. It tells the agent that search results are only excerpts, so it should open the articles it relies on: in the first pilot smoke stage, agents often answered from snippets alone, so faults (which fire on article pages) rarely got a chance to fire.
 - **Verification instruction (#21):** `VERIFY_INSTRUCTION` in `agent/prompts.py`. It asks the model to check every tool result before relying on it, and to start each thought with that check. `verify_prompt` and `harness` use the identical text, so comparing them isolates the effect of the `_harness` flags. It's frozen experiment text, recorded in the manifest's `system_prompt`.
 - **Harness conditions:** `harness` and `flags_only` turn on the harness layer automatically; no extra server or URL is needed. Their trace fields `harness_flags` and `proxy_latency_ms` are filled; see [the harness doc](harness.md).
-- **#29:** `verifier_output` stays `None` until the LLM verifier exists.
+- **LLM verifier:** `llm_verifier` wraps the tool session with a passive verifier; it adds an assessment to each tool-server response without using the verification prompt or harness checks. See [the harness doc](harness.md).
+- Batch summaries report agent and verifier costs separately for `llm_verifier`.
 
 ## Resume and episode IDs
 Episode IDs look like `<run-id>__<model>__<condition>__<scenario-id>__s<seed>__a<attempt>`.
@@ -79,6 +80,7 @@ The first run of a model/condition pair records its settings in `manifest.json`:
 - the full system prompt, the thought description and the final-turn message
 - `reasoning`: `null`, meaning each model's default
 - the budget and the seed
+- verifier model, prompt, output schema, decoding settings and line prefix for `llm_verifier`
 - SHA-256 hashes of the scenario files, compared by content, so the same file under another path is still a match
 - the git commit and whether the tree had uncommitted changes
 
