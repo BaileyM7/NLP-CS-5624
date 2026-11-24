@@ -58,6 +58,7 @@ class ChatResult(BaseModel):
     finish_reason: str | None
     message: dict[str, Any]  # the assistant message as sent back, ready to append to the conversation
     usage: Usage
+    usage_reported: bool = True
     latency_ms: float  # the successful attempt only
     attempts: int  # 1 + number of retries
 
@@ -112,6 +113,11 @@ def to_result(spec: ModelSpec, response, latency_ms: float, attempts: int) -> Ch
         finish_reason=choice.finish_reason,
         message=message.model_dump(exclude_none=True),
         usage=read_usage(response.usage),
+        usage_reported=(
+            response.usage is not None
+            and response.usage.prompt_tokens is not None
+            and response.usage.completion_tokens is not None
+        ),
         latency_ms=latency_ms,
         attempts=attempts,
     )
@@ -177,6 +183,7 @@ class OpenRouterClient:
         max_tokens: int | None = None,
         reasoning: dict[str, Any] | None = None,
         tag: str = "",
+        response_format: dict[str, Any] | None = None,
     ) -> ChatResult:
         """Send one chat request and return the reply.
 
@@ -198,6 +205,8 @@ class OpenRouterClient:
             request["max_tokens"] = max_tokens
         if reasoning:
             request["extra_body"]["reasoning"] = reasoning
+        if response_format is not None:
+            request["response_format"] = response_format
 
         response, latency_ms, attempts = await self._create_with_retries(request)
         result = to_result(spec, response, latency_ms, attempts)

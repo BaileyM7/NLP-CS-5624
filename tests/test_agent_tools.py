@@ -6,7 +6,6 @@ from toolharness.agent.prompts import (
     BASE_PROMPT,
     THOUGHT_DESCRIPTION,
     VERIFY_INSTRUCTION,
-    ConditionNotReady,
     require_ready,
     system_prompt,
 )
@@ -51,11 +50,9 @@ def test_verify_prompt_and_harness_share_the_verification_instruction():
     assert VERIFY_INSTRUCTION.endswith("treat their flags as hints to investigate, not as proof.")
 
 
-def test_every_condition_but_llm_verifier_is_ready():
-    for condition in ("baseline", "verify_prompt", "harness", "flags_only"):
+def test_every_condition_is_ready():
+    for condition in ("baseline", "verify_prompt", "llm_verifier", "harness", "flags_only"):
         require_ready(condition)
-    with pytest.raises(ConditionNotReady, match="#29"):
-        require_ready("llm_verifier")
 
 
 # Tool arguments

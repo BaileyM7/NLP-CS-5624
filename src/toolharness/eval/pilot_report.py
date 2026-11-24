@@ -186,14 +186,27 @@ def verifier_cost(episodes: list[Episode], dataset: str) -> float | None:
 
 
 def llm_verifier_total(data: RunData, costs: dict, dataset: str, n: int) -> tuple[float | None, list[str]]:
-    """Projected llm_verifier cost: the baseline agent cost plus the estimated verifier calls."""
-    agent, notes = projected_total(costs, "baseline", dataset, n)
-    verifier = verifier_cost(data.episodes, dataset)
-    if agent is None:
-        return None, notes
-    if verifier is None:
-        return None, [f"missing: cheap-model baseline on {dataset} (for the verifier estimate)"]
-    total = agent + verifier * n * FAULTS_PER_QUESTION * len(MAIN_RUN_MODELS)
+    """Prefer measured agent plus verifier cost; estimate missing model/dataset cells from baseline."""
+    verifier_estimate = verifier_cost(data.episodes, dataset)
+    total = 0.0
+    notes = []
+    for model in MAIN_RUN_MODELS:
+        measured = [
+            e.totals.agent_cost_usd + e.totals.verifier_cost_usd
+            for e in data.episodes
+            if e.model == model and e.condition == "llm_verifier" and e.dataset == dataset
+        ]
+        if measured:
+            cost = mean(measured)
+        else:
+            agent = estimate_cost(costs, model, "baseline", dataset)
+            if agent.cost is None:
+                return None, [agent.note]
+            if verifier_estimate is None:
+                return None, [f"missing: cheap-model baseline on {dataset} (for the verifier estimate)"]
+            cost = agent.cost + verifier_estimate
+            notes.append(f"{model} llm_verifier on {dataset}: {agent.note} baseline plus estimated verifier")
+        total += cost * n * FAULTS_PER_QUESTION
     return total, notes
 
 
@@ -234,7 +247,7 @@ def project_costs(data: RunData) -> str:
             all_notes += notes
             cells.append(money(total, notes))
             main_totals[i] = None if total is None or main_totals[i] is None else main_totals[i] + total
-        lines.append("| llm_verifier (estimated; replaced by the top-up pilot) | " + " | ".join(cells) + " |")
+        lines.append("| llm_verifier (measured where available; otherwise estimated) | " + " | ".join(cells) + " |")
         lines.append("| **Main total** (all but flags_only) | " + " | ".join(money(total, []) for total in main_totals) + " |")
 
     lines += [
@@ -242,7 +255,7 @@ def project_costs(data: RunData) -> str:
         "- **Not included:** the answer judge (#23: two Opus passes per episode, likely adding about half again on top of the "
         "agent cost), the fact-edit model, and failed attempts that were retried (their spend is in llm_usage.jsonl, not the traces).",
         "- HotpotQA N=100 needs new scenarios plus new fact edits and their review; the current file has 50 questions. LongSeal has 30.",
-        f"- llm_verifier: agent cost taken as baseline; verifier = one {VERIFIER_MODEL} call per tool response, input = question + "
+        f"- Unmeasured llm_verifier cells: agent cost taken as baseline; verifier = one {VERIFIER_MODEL} call per tool response, input = question + "
         f"every response so far at {CHARS_PER_TOKEN} characters per token, output = {VERIFIER_OUTPUT_TOKENS} tokens. Call counts "
         "and response sizes come from the cheap models' baseline episodes and are applied to every model.",
     ]
@@ -341,14 +354,14 @@ def episode_table(data: RunData) -> str:
 
     lines = [
         "## Episodes",
-        "| Model | Condition | Dataset | Episodes | Failed attempts | Cost/episode | Output tokens/episode | Turns/episode | Exact match | Stop reasons |",
+        "| Model | Condition | Dataset | Episodes | Failed attempts | Total cost/episode | Output tokens/episode | Turns/episode | Exact match | Stop reasons |",
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for key in sorted(set(groups) | set(errors)):
         episodes = groups.get(key, [])
         model, condition, dataset = key
         if episodes:
-            cost = f"${mean(e.totals.agent_cost_usd for e in episodes):.5f}"
+            cost = f"${mean(e.totals.agent_cost_usd + e.totals.verifier_cost_usd for e in episodes):.5f}"
             tokens = f"{mean(e.totals.agent_tokens.output_tokens for e in episodes):.0f}"
             turns = f"{mean(len(e.turns) for e in episodes):.1f}"
             stops = ", ".join(f"{reason} {count}" for reason, count in Counter(e.stop_reason for e in episodes).most_common())

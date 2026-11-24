@@ -65,6 +65,9 @@ class ToolCallTrace(TraceModel):
     # Null when this condition has no proxy flags (including baseline).
     harness_flags: list[str] | None = None
     verifier_output: VerifierOutput | None = None
+    verifier_tokens: TokenUsage | None = None
+    verifier_cost_usd: float | None = Field(default=None, ge=0)
+    verifier_latency_ms: float | None = Field(default=None, ge=0)
     proxy_latency_ms: float | None = Field(default=None, ge=0)
     repeats_earlier_call: bool = False
 

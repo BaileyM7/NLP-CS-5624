@@ -1,6 +1,6 @@
 # Pilot (#15)
 
-The pilot proves the pipeline works end to end, and sizes the full runs before the budget is spent. It covers `baseline`, `verify_prompt`, `harness` and `flags_only`. `llm_verifier` (#29) and the consistency check (#20) get a short top-up pilot once they exist.
+The pilot proves the pipeline works end to end, and sizes the full runs before the budget is spent. The scripted stages cover `baseline`, `verify_prompt`, `harness` and `flags_only`. Run a separate short `llm_verifier` top-up (#29) and a consistency-check top-up once #20 exists.
 
 Every stage makes paid OpenRouter calls. Run them in order, and look at the results before starting the next stage.
 
@@ -61,7 +61,7 @@ Post the report on #15, along with the N the team picks. It contains:
 - **Projected full-run cost:**
   - **Grid:** the 4 main models × 6 faults, for HotpotQA at N = 25, 50 and 100, and LongSeal at N = 15 and 30.
   - **Estimates:** costs that weren't measured are scaled from the cheap models, and every scaling is listed.
-  - **Provisional:** `llm_verifier` is an estimate until the top-up pilot.
+  - **Verifier:** measured agent plus verifier cost is used for model/dataset cells with top-up episodes; other cells are estimated from baseline.
   - **Optional:** `flags_only` is a separate line.
   - **Not included:** the answer judge (#23), which likely adds about half again on top of the agent cost, and retried failed attempts. Budget for both when choosing N.
 
@@ -102,3 +102,12 @@ python -m toolharness.eval.labeling export --run-id pilot-1 --out data/labels
   - `pilot-1_hotpotqa_ground_truth.jsonl`
 - **Commit:** these three files go into the #15 commit.
 - **LongSeal stays private.** LongSeal traces are never exported. Share `runs/pilot-1/` privately with whoever builds #23.
+
+## Verifier top-up
+Use the same scenario and edit files as the main pilot, and a fresh run ID and ground-truth log. For example, start the server as above with `--gt-log runs/pilot-verifier/ground_truth.jsonl`, then run:
+```bash
+python -m toolharness.agent --run-id pilot-verifier --model haiku-5.5 --condition llm_verifier \
+    --scenarios data/scenarios/hotpotqa.jsonl data/scenarios/longseal.jsonl --questions 1
+python -m toolharness.eval.pilot_report --run-id pilot-verifier
+```
+Inspect the traces and usage log for `_verifier` assessments, separately recorded verifier cost/tokens/latency, and errors before expanding the top-up. This makes paid agent and verifier calls. To include measured verifier costs in a broader pilot projection, run the top-up using the broader pilot's run ID and server ground-truth log, with the same scenario files and frozen settings.

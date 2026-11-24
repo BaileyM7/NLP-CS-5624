@@ -28,6 +28,7 @@ from ..eval.trace import Condition, append_jsonl, trace_filename
 from ..eval.trace import read_jsonl as read_episodes
 from ..harness.checks import HARNESS_CHECKS, HARNESS_CONDITIONS, harness_settings
 from ..harness.session import HarnessSession
+from ..harness.verifier import VerifierSession, verifier_settings
 from ..llm.client import OpenRouterClient
 from ..llm.models import get_model
 from .prompts import FINAL_TURN_MESSAGE, THOUGHT_DESCRIPTION, system_prompt
@@ -48,6 +49,7 @@ EXPERIMENT_FIELDS = (
     "seed",
     "scenario_hashes",
     "harness",
+    "verifier",
 )
 
 
@@ -76,6 +78,7 @@ class BatchSummary:
     errored: int = 0
     stop_reasons: Counter = field(default_factory=Counter)
     cost_usd: float = 0.0
+    verifier_cost_usd: float = 0.0
 
 
 class ManifestMismatch(Exception):
@@ -136,6 +139,7 @@ def manifest_entry(config: BatchConfig) -> dict:
         "budget": dataclasses.asdict(Budget()),
         "seed": config.seed,
         "harness": harness_settings(config.condition),
+        "verifier": verifier_settings(config.condition),
         "scenario_hashes": sorted(hashes.values()),  # compared on resume, whatever the paths were called
         "scenario_files": hashes,  # recorded only
         "git_commit": commit,
@@ -245,6 +249,8 @@ async def run_batch(
                 # Harness conditions check every tool response before the model sees it
                 if config.condition in HARNESS_CONDITIONS:
                     session = HarnessSession(session, HARNESS_CHECKS)
+                elif config.condition == "llm_verifier":
+                    session = VerifierSession(session, llm, scenario.question)
                 async with session:
                     episode = await run_episode(llm, session, scenario, config.model, config.condition, episode_id)
             except Exception as error:
@@ -258,6 +264,7 @@ async def run_batch(
             summary.ran += 1
             summary.stop_reasons[episode.stop_reason] += 1
             summary.cost_usd += episode.totals.agent_cost_usd
+            summary.verifier_cost_usd += episode.totals.verifier_cost_usd
 
     await asyncio.gather(*(run_one(scenario) for scenario in to_run))
     return summary

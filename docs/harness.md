@@ -59,3 +59,16 @@ Is an article page's `last_updated` more than **365 days** before today (AS_OF, 
 - **LongSeal clean pages often are.** They keep their real dates, and 41% of them (27% of LongSeal answer pages) are more than a year old. That's a realistic false-alarm test, and the pilot report measures it.
 - **Why 1 year.** It's a common rule of thumb, chosen without reference to the stale fault's 3–6 years. With a 2-year window, LongSeal false flags would drop to 23% (4% of answer pages).
 - **Frozen.** The window is recorded in the manifest as `freshness_days`.
+
+## LLM verifier baseline (#29)
+`llm_verifier` uses a separate `VerifierSession` inside the runner rather than the heuristic harness. The agent gets the same base prompt as `baseline`: no verification instruction and no `_harness` line. The verifier is always GPT-6 Astra, distinct from the Opus 5.5 judge. It has no tools and sees only the question, earlier raw tool responses (with tool names and error status), and the new raw response. It sees neither scenario IDs nor injection ground truth. Earlier verifier assessments are not fed back to it.
+
+After each server response the verifier appends one line:
+```
+_verifier: {"suspicious":false,"fault_guess":null,"reason":"No evidence of a problem."}
+```
+The response text and `is_error` are otherwise unchanged. Each assessment is a suspicion, not proof of correctness or corruption. Runner-generated `invalid_arguments` and `not_run` responses do not reach the server and are not assessed. The verifier has no opportunity to make tool calls; only agent calls reach the MCP server.
+
+The verifier requests strict JSON-schema output and validates all three fields, their types and a nonempty reason. An incomplete or invalid reply, a provider failure, or missing token usage/billed cost fails the episode and is recorded in `errors.jsonl`; it is retried as a fresh attempt on resume rather than silently presenting an unverified response. The run manifest freezes the verifier model and OpenRouter ID, prompt, schema, output-token limit, reasoning setting and line prefix.
+
+Traces store the structured `verifier_output`, verifier tokens, cost and successful-call latency per tool call, plus separate verifier token and cost totals per episode. Agent token limits exclude verifier usage. `llm_usage.jsonl` tags calls `agent` or `verifier`; it includes successful calls from failed attempts as well. Episode latency includes the verifier, while verifier call latency excludes provider retries.

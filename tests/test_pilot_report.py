@@ -10,6 +10,7 @@ from toolharness.eval.pilot_report import (
     flag_counts,
     injection_counts,
     load_run,
+    llm_verifier_total,
     main,
     mean_costs,
     project_costs,
@@ -97,6 +98,17 @@ def test_llm_verifier_estimate_from_response_sizes():
     expected = (110 + 310) * 10.0 / 1e6 + 300 * 50.0 / 1e6
     assert verifier_cost([episode], "hotpotqa") == pytest.approx(expected)
     assert verifier_cost([episode], "longseal") is None
+
+
+def test_llm_verifier_projection_uses_measured_agent_and_verifier_costs(tmp_path):
+    models = ("opus-5.5", "haiku-5.5", "gpt-6-astra", "gpt-6-luna")
+    episodes = [make_episode(model, "llm_verifier", "hotpotqa", "none", cost=1.0) for model in models]
+    for episode in episodes:
+        episode.totals.verifier_cost_usd = 2.0
+    data = load_run(write_run(tmp_path / "pilot-1", episodes))
+    total, notes = llm_verifier_total(data, mean_costs(episodes), "hotpotqa", 25)
+    assert total == pytest.approx(4 * 3.0 * 25 * 6)
+    assert notes == []
 
 
 # Injection, flags and reflection
