@@ -91,7 +91,7 @@ Does a page rewrite a sentence the agent was already shown in this episode, in a
 - **Frozen.** The threshold is recorded in the manifest as `consistency_overlap`.
 
 ## LLM verifier baseline (#29)
-`llm_verifier` uses a separate `VerifierSession` inside the runner rather than the heuristic harness. The agent gets the same base prompt as `baseline`: no verification instruction and no `_harness` line. The verifier is always GPT-6 Astra, distinct from the Opus 5.5 judge. It has no tools and sees only the question, earlier raw tool responses (with tool names and error status), and the new raw response. It sees neither scenario IDs nor injection ground truth. Earlier verifier assessments are not fed back to it.
+`llm_verifier` uses a separate `VerifierSession` inside the runner rather than the heuristic harness. The agent gets the same base prompt as `baseline`: no verification instruction and no `_harness` line. The verifier is always GPT-6.1 Sol (`VERIFIER_MODEL`), distinct from the Opus 5.5 judge and from every agent model. It has no tools and sees only the question, earlier raw tool responses (with tool names and error status), and the new raw response. It sees neither scenario IDs nor injection ground truth. Earlier verifier assessments are not fed back to it.
 
 After each server response the verifier appends one line:
 ```

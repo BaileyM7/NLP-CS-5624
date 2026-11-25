@@ -12,7 +12,7 @@ This document defines the outcomes and conditions used by the tool reliability e
 | `harness` | Proxy checks/flags plus the same fixed verification prompt as `verify_prompt` | Measures the combined harness |
 | `flags_only` (stretch) | Proxy checks/flags; no verification prompt | Isolates proxy flags, if run |
 
-The main agent models are Claude Opus 5.5, Claude Haiku 5.5, GPT-6 Astra, and GPT-6 Luna. Use **GPT-6 Astra** as the verifier and **Claude Opus 5.5** as the answer judge; these roles use different models. Freeze model identifiers, prompt text, and decoding settings in the run manifest. The proxy must not see ground-truth fault logs. A proxy flag is a suspicion signal, not proof that the response is false.
+The main agent models are Claude Haiku 5.5 and GPT-6 Luna on both datasets, and Claude Opus 5.5 on HotpotQA only. Use **GPT-6.1 Sol** as the verifier and **Claude Opus 5.5** as the answer judge; these roles use different models, and the verifier is not one of the agent models. *(Changed Nov 24, 2026, to cut cost. The proposal's GPT-6 Astra was dropped as an agent and as the verifier, because at $10/$50 per million tokens it made up most of the projected budget. Opus runs HotpotQA only because LongSeal episodes cost about 3x more. Opus as the judge also judges its own episodes; report that self-preference risk alongside the hand-label agreement.)* Freeze model identifiers, prompt text, and decoding settings in the run manifest. The proxy must not see ground-truth fault logs. A proxy flag is a suspicion signal, not proof that the response is false.
 
 ## Injection target and episode budget
 

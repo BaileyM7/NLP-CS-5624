@@ -52,7 +52,7 @@ The server's `--gt-log` file gets one JSON row per agent tool call:
 | `contradiction` (#13) | `faults/contradiction.py` | The silently_wrong edit, applied only once the agent has already been shown this page's clean fact (the edit's `original_value`): in the page's own search snippet, or on an earlier visit to it. The agent then sees the same sentence with two different values. Mentions on other pages, even other answer pages, don't count: they usually name the same thing without stating the same fact. |
 
 ## Fact edits
-Each silently_wrong answer page needs a **fact edit**: an exact span from a supporting sentence (`original_value`), a plausible replacement (`new_value`), and the answer a reader who trusts the edited page would give (`new_answer`). Claude Sonnet 5.5 writes them once, through OpenRouter. It isn't one of the four models under test. Stale and contradiction scenarios reuse the edit of the same question's silently_wrong scenario, so they need no edits of their own.
+Each silently_wrong answer page needs a **fact edit**: an exact span from a supporting sentence (`original_value`), a plausible replacement (`new_value`), and the answer a reader who trusts the edited page would give (`new_answer`). Claude Sonnet 5.5 writes them once, through OpenRouter. It isn't one of the models under test. Stale and contradiction scenarios reuse the edit of the same question's silently_wrong scenario, so they need no edits of their own.
 
 ```bash
 python -m toolharness.data.fact_edits --scenarios data/scenarios/hotpotqa.jsonl --out data/edits/hotpotqa.jsonl

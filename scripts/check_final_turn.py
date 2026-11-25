@@ -9,7 +9,7 @@ Each model runs two short episodes on a sample question:
 Both must reach their forced turn and get an answer from it.
 
 Usage:
-    python scripts/check_final_turn.py                    # the four main-run models
+    python scripts/check_final_turn.py                    # the main-run models (Opus, Haiku, Luna)
     python scripts/check_final_turn.py --models opus-5.5
 """
 from __future__ import annotations

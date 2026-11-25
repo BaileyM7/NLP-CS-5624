@@ -80,19 +80,20 @@ def test_estimate_names_missing_measurements():
     assert verify.cost is None and "verify_prompt" in verify.note
 
 
-def test_projected_total_multiplies_by_n_and_six_faults():
-    costs = {(model, "baseline", "hotpotqa"): 1.0 for model in ("opus-5.5", "haiku-5.5", "gpt-6-astra", "gpt-6-luna")}
+def test_projected_total_sums_the_planned_models_times_n_and_six_faults():
+    costs = {(model, "baseline", "hotpotqa"): 1.0 for model in ("opus-5.5", "haiku-5.5", "gpt-6-luna")}
     total, notes = projected_total(costs, "baseline", "hotpotqa", 25)
-    assert total == pytest.approx(4 * 1.0 * 25 * 6)
+    assert total == pytest.approx(3 * 1.0 * 25 * 6)  # Opus, Haiku and Luna run HotpotQA
     assert notes == []
-    assert projected_total(COSTS, "baseline", "hotpotqa", 25)[0] is None  # gpt-6-astra is missing
+    without_opus = {key: cost for key, cost in costs.items() if key[0] != "opus-5.5"}
+    assert projected_total(without_opus, "baseline", "hotpotqa", 25)[0] is None  # opus-5.5 is missing
 
 
 def test_projection_counts_five_fault_types_for_longseal():
     assert FAULT_TYPES == {"hotpotqa": 6, "longseal": 5}  # contradiction runs on HotpotQA only
-    costs = {(model, "baseline", "longseal"): 1.0 for model in ("opus-5.5", "haiku-5.5", "gpt-6-astra", "gpt-6-luna")}
+    costs = {(model, "baseline", "longseal"): 1.0 for model in ("haiku-5.5", "gpt-6-luna")}
     total, _ = projected_total(costs, "baseline", "longseal", 15)
-    assert total == pytest.approx(4 * 1.0 * 15 * 5)
+    assert total == pytest.approx(2 * 1.0 * 15 * 5)  # only Haiku and Luna run LongSeal
 
 
 def verifier_episode(model, dataset, agent, verifier, scenario="v"):
@@ -107,12 +108,11 @@ def test_llm_verifier_uses_measured_cheap_verifier_cost_for_other_models(tmp_pat
         episodes.append(make_episode(cheap, "baseline", "hotpotqa", "none", cost=1.0))
         episodes.append(verifier_episode(cheap, "hotpotqa", agent=1.5, verifier=2.0))
     episodes.append(make_episode("opus-5.5", "baseline", "hotpotqa", "none", cost=10.0))
-    episodes.append(make_episode("gpt-6-astra", "baseline", "hotpotqa", "none", cost=20.0))
     data = load_run(write_run(tmp_path / "pilot-2", episodes))
 
     total, notes = llm_verifier_total(data, mean_costs(data.episodes), "hotpotqa", 25)
-    # Cheap models measured 1.5 + 2.0; Opus and Astra scale only the agent part by 1.5x, then add the flat 2.0
-    assert total == pytest.approx((3.5 + 3.5 + (10 * 1.5 + 2.0) + (20 * 1.5 + 2.0)) * 25 * 6)
+    # Cheap models measured 1.5 + 2.0; Opus scales only the agent part by 1.5x, then adds the flat 2.0
+    assert total == pytest.approx((3.5 + 3.5 + (10 * 1.5 + 2.0)) * 25 * 6)
     assert any("measured cheap-model verifier cost" in note for note in notes)
 
 
@@ -122,8 +122,7 @@ def test_llm_verifier_falls_back_to_the_size_estimate_per_dataset(tmp_path):
         episodes.append(make_episode(cheap, "baseline", "hotpotqa", "none", cost=1.0, calls=[("search", "s" * 400, None)]))
         episodes.append(make_episode(cheap, "baseline", "longseal", "none", cost=3.0, calls=[("search", "s" * 800, None)]))
         episodes.append(verifier_episode(cheap, "hotpotqa", agent=1.5, verifier=2.0))
-    for big in ("opus-5.5", "gpt-6-astra"):
-        episodes.append(make_episode(big, "baseline", "hotpotqa", "none", cost=10.0))
+    episodes.append(make_episode("opus-5.5", "baseline", "hotpotqa", "none", cost=10.0))
     data = load_run(write_run(tmp_path / "pilot-2", episodes))
 
     total, notes = llm_verifier_total(data, mean_costs(data.episodes), "longseal", 15)
@@ -153,7 +152,7 @@ def test_verifier_table_splits_corrupted_and_clean_verdicts(tmp_path):
 def test_projection_names_missing_measurements(tmp_path):
     episodes = [make_episode(model, "baseline", "hotpotqa", "none", cost=0.001) for model in CHEAP]
     text = project_costs(load_run(write_run(tmp_path / "pilot-1", episodes)))
-    assert "missing:" in text and "gpt-6-astra" in text
+    assert "missing:" in text and "opus-5.5" in text
 
 
 def test_llm_verifier_estimate_from_response_sizes():
@@ -162,19 +161,19 @@ def test_llm_verifier_estimate_from_response_sizes():
         question="Q" * 40, calls=[("search", "s" * 400, None), ("get_article", "a" * 800, None)],
     )
     # Inputs: (40 + 400) / 4 = 110 and (40 + 400 + 800) / 4 = 310 tokens; outputs: 150 tokens per call
-    expected = (110 + 310) * 10.0 / 1e6 + 300 * 50.0 / 1e6
+    expected = (110 + 310) * 2.0 / 1e6 + 300 * 10.0 / 1e6  # GPT-6.1 Sol prices
     assert verifier_cost([episode], "hotpotqa") == pytest.approx(expected)
     assert verifier_cost([episode], "longseal") is None
 
 
 def test_llm_verifier_projection_uses_measured_agent_and_verifier_costs(tmp_path):
-    models = ("opus-5.5", "haiku-5.5", "gpt-6-astra", "gpt-6-luna")
+    models = ("opus-5.5", "haiku-5.5", "gpt-6-luna")
     episodes = [make_episode(model, "llm_verifier", "hotpotqa", "none", cost=1.0) for model in models]
     for episode in episodes:
         episode.totals.verifier_cost_usd = 2.0
     data = load_run(write_run(tmp_path / "pilot-1", episodes))
     total, notes = llm_verifier_total(data, mean_costs(episodes), "hotpotqa", 25)
-    assert total == pytest.approx(4 * 3.0 * 25 * 6)
+    assert total == pytest.approx(3 * 3.0 * 25 * 6)
     assert notes == []
 
 

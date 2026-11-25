@@ -6,11 +6,14 @@ import json
 import pytest
 from fakes import SAMPLE_FILE, FakeOpenRouter, answer_reply, free_port, make_client, tool_reply
 
+import toolharness.agent.__main__ as cli
 from toolharness.agent.__main__ import main, parse_skip
 from toolharness.agent.batch import (
     BatchConfig,
+    BatchSummary,
     ManifestMismatch,
     check_manifest,
+    default_concurrency,
     make_episode_id,
     manifest_entry,
     run_batch,
@@ -89,6 +92,29 @@ def test_skip_parses_and_rejects_unknown_values():
     with pytest.raises(SystemExit) as exit_info:
         main(argv)
     assert exit_info.value.code == 2
+
+
+def test_opus_gpt_models_and_llm_verifier_run_one_episode_at_a_time():
+    assert default_concurrency("opus-5.5", "baseline") == 1
+    assert default_concurrency("gpt-6-luna", "harness") == 1
+    assert default_concurrency("haiku-5.5", "llm_verifier") == 1  # its verifier is a GPT model
+    assert default_concurrency("haiku-5.5", "baseline") == 4
+
+
+def test_command_line_uses_the_model_default_unless_concurrency_is_given(monkeypatch):
+    seen = []
+
+    async def fake_run(config):
+        seen.append(config.concurrency)
+        return BatchSummary()
+
+    monkeypatch.setattr(cli, "check_server", lambda url: True)
+    monkeypatch.setattr(cli, "run", fake_run)
+    argv = ["--run-id", "r", "--condition", "baseline", "--scenarios", str(SAMPLE_FILE)]
+    main(argv + ["--model", "opus-5.5"])
+    main(argv + ["--model", "haiku-5.5"])
+    main(argv + ["--model", "opus-5.5", "--concurrency", "3"])
+    assert seen == [1, 4, 3]
 
 
 @pytest.mark.anyio

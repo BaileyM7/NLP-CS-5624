@@ -7,16 +7,16 @@ Defined in `src/toolharness/llm/models.py`. Use the short name everywhere (run I
 
 | Short name | OpenRouter ID | Main run | $ / 1M tokens in / out |
 |---|---|---|---|
-| `opus-5.5` | `anthropic/claude-opus-5.5` | yes | 4 / 20 |
+| `opus-5.5` | `anthropic/claude-opus-5.5` | yes, HotpotQA only (and the judge) | 4 / 20 |
 | `haiku-5.5` | `anthropic/claude-haiku-5.5` | yes | 0.10 / 0.50 |
-| `gpt-6-astra` | `openai/gpt-6-astra` | yes | 10 / 50 |
+| `gpt-6-astra` | `openai/gpt-6-astra` | no (dropped Nov 24 to cut cost) | 10 / 50 |
 | `gpt-6-luna` | `openai/gpt-6-luna` | yes | 0.10 / 0.50 |
 | `sonnet-5.5` | `anthropic/claude-sonnet-5.5` | no (wrote the fact edits) | 2 / 10 |
-| `gpt-6.1-sol` | `openai/gpt-6.1-sol` | no | 2 / 10 |
+| `gpt-6.1-sol` | `openai/gpt-6.1-sol` | no (the LLM verifier) | 2 / 10 |
 
 OpenRouter lists tool calling, `tool_choice` and reasoning for all six (checked Nov 19, 2026).
 
-Roles fixed by [the experiment spec](experiment-spec.md), as constants in `models.py`: `VERIFIER_MODEL = "gpt-6-astra"`, `JUDGE_MODEL = "opus-5.5"`, `FACT_EDIT_MODEL = "sonnet-5.5"`. The verifier and judge are also tested models, so the report should mention possible self-preference bias.
+Roles fixed by [the experiment spec](experiment-spec.md), as constants in `models.py`: `VERIFIER_MODEL = "gpt-6.1-sol"`, `JUDGE_MODEL = "opus-5.5"`, `FACT_EDIT_MODEL = "sonnet-5.5"`. `MAIN_RUN_DATASETS` records which datasets each main-run model runs (Opus: HotpotQA only). The verifier is not a tested model. The judge (Opus) also judges its own HotpotQA episodes, so the report should mention possible self-preference bias.
 
 ## Calling a model with tools
 ```python
@@ -59,7 +59,7 @@ For the trace (`eval/trace.py`), the usage maps one to one: `TokenUsage(input_to
 
 ## Smoke test
 ```bash
-python scripts/smoke_models.py                                  # four main-run models
+python scripts/smoke_models.py                                  # the main-run models (Opus, Haiku, Luna)
 python scripts/smoke_models.py --all --usage-log runs/smoke.jsonl  # all six, with a usage log
 python scripts/smoke_models.py --models opus-5.5 --tool-choice required  # chosen models, forced tool use
 ```

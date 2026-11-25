@@ -53,6 +53,16 @@ EXPERIMENT_FIELDS = (
 )
 
 
+def default_concurrency(model: str, condition: str) -> int:
+    """Episodes at once: 1 for Opus and GPT models, and for llm_verifier (its verifier is a GPT model); 4 for the rest.
+
+    OpenRouter counts each call's requested max_tokens against the per-minute limit, so these hit HTTP 429 in parallel.
+    """
+    if model.startswith(("gpt", "opus")) or condition == "llm_verifier":
+        return 1
+    return 4
+
+
 @dataclass
 class BatchConfig:
     run_id: str

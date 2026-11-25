@@ -19,7 +19,7 @@ from ..agent.runner import INVALID_ARGUMENTS, NOT_RUN
 from ..data.scenario import FaultType
 from ..harness.checks import HARNESS_CONDITIONS
 from ..injector.ground_truth import EpisodeSummary, summarize_gt
-from ..llm.models import MAIN_RUN_MODELS, MODELS, VERIFIER_MODEL
+from ..llm.models import MAIN_RUN_DATASETS, MAIN_RUN_MODELS, MODELS, VERIFIER_MODEL
 from .trace import Episode, read_jsonl
 
 CHEAP_MODELS = ("haiku-5.5", "gpt-6-luna")  # run on every condition and both datasets, so their ratios scale the rest
@@ -154,11 +154,16 @@ def estimate_cost(costs: dict, model: str, condition: str, dataset: str) -> Esti
     return Estimate(hotpot.cost * ratio, f"{hotpot.note}, then x{ratio:.2f} for {dataset} (cheap models)")
 
 
+def planned_models(dataset: str) -> list[str]:
+    """The main-run models the full experiment runs on this dataset (Opus: HotpotQA only)."""
+    return [model for model in MAIN_RUN_MODELS if dataset in MAIN_RUN_DATASETS[model]]
+
+
 def projected_total(costs: dict, condition: str, dataset: str, n: int) -> tuple[float | None, list[str]]:
-    """Cost of N questions x every fault type, summed over the four main-run models; None if any can't be estimated."""
+    """Cost of N questions x every fault type, summed over the models planned for this dataset; None if any can't be estimated."""
     total = 0.0
     notes = []
-    for model in MAIN_RUN_MODELS:
+    for model in planned_models(dataset):
         estimate = estimate_cost(costs, model, condition, dataset)
         if estimate.cost is None:
             return None, [estimate.note]
@@ -204,7 +209,7 @@ def llm_verifier_total(data: RunData, costs: dict, dataset: str, n: int) -> tupl
     verifier_estimate = verifier_cost(data.episodes, dataset)
     total = 0.0
     notes = []
-    for model in MAIN_RUN_MODELS:
+    for model in planned_models(dataset):
         measured = [
             e.totals.agent_cost_usd + e.totals.verifier_cost_usd
             for e in data.episodes
@@ -246,8 +251,9 @@ def project_costs(data: RunData) -> str:
     costs = mean_costs(data.episodes)
     lines = [
         "## Projected full-run cost",
-        f"The 4 main-run models x {FAULT_TYPES['hotpotqa']} fault types per HotpotQA question and {FAULT_TYPES['longseal']} per "
-        "LongSeal question (contradiction: HotpotQA only), one seed, no repeats.",
+        f"HotpotQA: {', '.join(planned_models('hotpotqa'))}; LongSeal: {', '.join(planned_models('longseal'))}. "
+        f"{FAULT_TYPES['hotpotqa']} fault types per HotpotQA question and {FAULT_TYPES['longseal']} per LongSeal question "
+        "(contradiction: HotpotQA only), one seed, no repeats.",
     ]
     all_notes: list[str] = []
     for dataset in DATASETS:

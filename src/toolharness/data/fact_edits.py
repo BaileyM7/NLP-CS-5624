@@ -24,7 +24,7 @@ from ..llm.client import LLMError, OpenRouterClient, openrouter_api_key
 from ..llm.models import FACT_EDIT_MODEL, MODELS
 from .scenario import FaultType, Scenario, fault_variant_id, read_jsonl
 
-DEFAULT_MODEL = MODELS[FACT_EDIT_MODEL].openrouter_id  # outside the four models under test
+DEFAULT_MODEL = MODELS[FACT_EDIT_MODEL].openrouter_id  # not one of the models under test
 MAX_ATTEMPTS = 3
 MAX_VALUE_CHARS = 80
 EDIT_FAULTS = (FaultType.SILENTLY_WRONG, FaultType.STALE, FaultType.CONTRADICTION)  # faults that apply a fact edit

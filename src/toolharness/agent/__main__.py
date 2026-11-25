@@ -18,7 +18,16 @@ from ..data.scenario import Dataset, FaultType
 from ..eval.trace import Condition
 from ..llm.client import LLMError, OpenRouterClient
 from ..llm.models import MODELS
-from .batch import DEFAULT_SERVER_URL, BatchConfig, BatchSummary, ManifestMismatch, check_server, health_url, run_batch
+from .batch import (
+    DEFAULT_SERVER_URL,
+    BatchConfig,
+    BatchSummary,
+    ManifestMismatch,
+    check_server,
+    default_concurrency,
+    health_url,
+    run_batch,
+)
 from .prompts import ConditionNotReady, require_ready
 
 
@@ -42,7 +51,10 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--questions", type=int, help="only the first N questions of each scenario file")
     parser.add_argument("--faults", nargs="+", choices=[fault.value for fault in FaultType], help="only these fault types")
     parser.add_argument("--seed", type=int, default=0, help="fault-injector seed")
-    parser.add_argument("--concurrency", type=int, default=4, help="episodes run at the same time")
+    parser.add_argument(
+        "--concurrency", type=int,
+        help="episodes run at the same time (default: 1 for Opus, GPT models and llm_verifier, else 4)",
+    )
     parser.add_argument(
         "--skip", action="append", type=parse_skip, default=[], metavar="DATASET:FAULT",
         help="leave out one fault type on one dataset, e.g. longseal:contradiction (repeatable)",
@@ -76,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         questions=args.questions,
         faults=[FaultType(value) for value in args.faults] if args.faults else None,
         seed=args.seed,
-        concurrency=args.concurrency,
+        concurrency=args.concurrency or default_concurrency(args.model, args.condition),
         skip=args.skip,
     )
     try:
