@@ -4,6 +4,7 @@ from fakes import gt_row, make_episode, write_run
 
 from toolharness.agent.runner import INVALID_ARGUMENTS
 from toolharness.eval.pilot_report import (
+    FAULT_TYPES,
     Estimate,
     estimate_cost,
     exact_match,
@@ -16,8 +17,12 @@ from toolharness.eval.pilot_report import (
     project_costs,
     projected_total,
     reflection_counts,
+    reflection_table,
     verifier_cost,
+    verifier_counts,
+    verifier_table,
 )
+from toolharness.eval.trace import VerifierOutput
 from toolharness.llm.models import MODELS
 
 CHEAP = ("haiku-5.5", "gpt-6-luna")
@@ -75,18 +80,79 @@ def test_estimate_names_missing_measurements():
     assert verify.cost is None and "verify_prompt" in verify.note
 
 
-def test_projected_total_multiplies_by_n_and_six_faults():
-    costs = {(model, "baseline", "hotpotqa"): 1.0 for model in ("opus-5.5", "haiku-5.5", "gpt-6-astra", "gpt-6-luna")}
+def test_projected_total_sums_the_planned_models_times_n_and_six_faults():
+    costs = {(model, "baseline", "hotpotqa"): 1.0 for model in ("opus-5.5", "haiku-5.5", "gpt-6-luna")}
     total, notes = projected_total(costs, "baseline", "hotpotqa", 25)
-    assert total == pytest.approx(4 * 1.0 * 25 * 6)
+    assert total == pytest.approx(3 * 1.0 * 25 * 6)  # Opus, Haiku and Luna run HotpotQA
     assert notes == []
-    assert projected_total(COSTS, "baseline", "hotpotqa", 25)[0] is None  # gpt-6-astra is missing
+    without_opus = {key: cost for key, cost in costs.items() if key[0] != "opus-5.5"}
+    assert projected_total(without_opus, "baseline", "hotpotqa", 25)[0] is None  # opus-5.5 is missing
+
+
+def test_projection_counts_five_fault_types_for_longseal():
+    assert FAULT_TYPES == {"hotpotqa": 6, "longseal": 5}  # contradiction runs on HotpotQA only
+    costs = {(model, "baseline", "longseal"): 1.0 for model in ("haiku-5.5", "gpt-6-luna")}
+    total, _ = projected_total(costs, "baseline", "longseal", 15)
+    assert total == pytest.approx(2 * 1.0 * 15 * 5)  # only Haiku and Luna run LongSeal
+
+
+def verifier_episode(model, dataset, agent, verifier, scenario="v"):
+    episode = make_episode(model, "llm_verifier", dataset, "none", cost=agent, scenario=scenario, calls=[("search", "s" * 400, None)])
+    episode.totals.verifier_cost_usd = verifier
+    return episode
+
+
+def test_llm_verifier_uses_measured_cheap_verifier_cost_for_other_models(tmp_path):
+    episodes = []
+    for cheap in CHEAP:
+        episodes.append(make_episode(cheap, "baseline", "hotpotqa", "none", cost=1.0))
+        episodes.append(verifier_episode(cheap, "hotpotqa", agent=1.5, verifier=2.0))
+    episodes.append(make_episode("opus-5.5", "baseline", "hotpotqa", "none", cost=10.0))
+    data = load_run(write_run(tmp_path / "pilot-2", episodes))
+
+    total, notes = llm_verifier_total(data, mean_costs(data.episodes), "hotpotqa", 25)
+    # Cheap models measured 1.5 + 2.0; Opus scales only the agent part by 1.5x, then adds the flat 2.0
+    assert total == pytest.approx((3.5 + 3.5 + (10 * 1.5 + 2.0)) * 25 * 6)
+    assert any("measured cheap-model verifier cost" in note for note in notes)
+
+
+def test_llm_verifier_falls_back_to_the_size_estimate_per_dataset(tmp_path):
+    episodes = []
+    for cheap in CHEAP:
+        episodes.append(make_episode(cheap, "baseline", "hotpotqa", "none", cost=1.0, calls=[("search", "s" * 400, None)]))
+        episodes.append(make_episode(cheap, "baseline", "longseal", "none", cost=3.0, calls=[("search", "s" * 800, None)]))
+        episodes.append(verifier_episode(cheap, "hotpotqa", agent=1.5, verifier=2.0))
+    episodes.append(make_episode("opus-5.5", "baseline", "hotpotqa", "none", cost=10.0))
+    data = load_run(write_run(tmp_path / "pilot-2", episodes))
+
+    total, notes = llm_verifier_total(data, mean_costs(data.episodes), "longseal", 15)
+    assert total is not None
+    assert any("estimated verifier cost" in note for note in notes)  # no LongSeal verifier measurement yet
+    # No llm_verifier measurement on LongSeal to scale the agent part from, so it falls back to baseline and says so
+    assert all("agent from baseline" in note for note in notes)
+
+
+def test_verifier_table_splits_corrupted_and_clean_verdicts(tmp_path):
+    episode = make_episode(
+        "haiku-5.5", "llm_verifier", "hotpotqa", "malformed",
+        calls=[("search", "clean\n\n_verifier: {}", None), ("get_article", "<html>broken\n\n_verifier: {}", None)],
+    )
+    calls = episode.turns[0].tool_calls
+    calls[0].verifier_output = VerifierOutput(suspicious=False, fault_guess=None, reason="Looks fine.")
+    calls[1].verifier_output = VerifierOutput(suspicious=True, fault_guess="malformed", reason="Not JSON.")
+    rows = [gt_row(episode, 0, "search"), gt_row(episode, 1, "get_article", corrupted=True, original="{}", corrupted_text="<html>broken")]
+    data = load_run(write_run(tmp_path / "pilot-2", [episode], rows))
+
+    assert verifier_counts(data) == {
+        ("malformed", "hotpotqa"): {"corrupted": (1, 1), "clean": (0, 1), "after_corrupted": (0, 0), "tool_errors": (0, 0)}
+    }
+    assert "## LLM verifier verdicts" in verifier_table(data)
 
 
 def test_projection_names_missing_measurements(tmp_path):
     episodes = [make_episode(model, "baseline", "hotpotqa", "none", cost=0.001) for model in CHEAP]
     text = project_costs(load_run(write_run(tmp_path / "pilot-1", episodes)))
-    assert "missing:" in text and "gpt-6-astra" in text
+    assert "missing:" in text and "opus-5.5" in text
 
 
 def test_llm_verifier_estimate_from_response_sizes():
@@ -95,19 +161,19 @@ def test_llm_verifier_estimate_from_response_sizes():
         question="Q" * 40, calls=[("search", "s" * 400, None), ("get_article", "a" * 800, None)],
     )
     # Inputs: (40 + 400) / 4 = 110 and (40 + 400 + 800) / 4 = 310 tokens; outputs: 150 tokens per call
-    expected = (110 + 310) * 10.0 / 1e6 + 300 * 50.0 / 1e6
+    expected = (110 + 310) * 2.0 / 1e6 + 300 * 10.0 / 1e6  # GPT-6.1 Sol prices
     assert verifier_cost([episode], "hotpotqa") == pytest.approx(expected)
     assert verifier_cost([episode], "longseal") is None
 
 
 def test_llm_verifier_projection_uses_measured_agent_and_verifier_costs(tmp_path):
-    models = ("opus-5.5", "haiku-5.5", "gpt-6-astra", "gpt-6-luna")
+    models = ("opus-5.5", "haiku-5.5", "gpt-6-luna")
     episodes = [make_episode(model, "llm_verifier", "hotpotqa", "none", cost=1.0) for model in models]
     for episode in episodes:
         episode.totals.verifier_cost_usd = 2.0
     data = load_run(write_run(tmp_path / "pilot-1", episodes))
     total, notes = llm_verifier_total(data, mean_costs(episodes), "hotpotqa", 25)
-    assert total == pytest.approx(4 * 3.0 * 25 * 6)
+    assert total == pytest.approx(3 * 3.0 * 25 * 6)
     assert notes == []
 
 
@@ -147,9 +213,29 @@ def test_flags_are_split_by_fault_and_by_corrupted_clean_and_tool_error_response
     ]
     data = load_run(write_run(tmp_path / "pilot-1", [episode, bad_args], rows))
     assert flag_counts(data) == {
-        ("harness", "malformed", "hotpotqa"): {"corrupted": (1, 1), "clean": (0, 1), "tool_errors": (0, 0)},
-        ("harness", "none", "hotpotqa"): {"corrupted": (0, 0), "clean": (0, 0), "tool_errors": (1, 1)},
+        ("harness", "malformed", "hotpotqa"): {"corrupted": (1, 1), "clean": (0, 1), "after_corrupted": (0, 0), "tool_errors": (0, 0)},
+        ("harness", "none", "hotpotqa"): {"corrupted": (0, 0), "clean": (0, 0), "after_corrupted": (0, 0), "tool_errors": (1, 1)},
     }
+
+
+def test_clean_responses_after_the_corrupted_one_are_counted_apart(tmp_path):
+    # A clean re-fetch that conflicts with the earlier corrupted page is a real conflict, not a false flag
+    episode = make_episode(
+        "haiku-5.5", "harness", "hotpotqa", "silently_wrong",
+        calls=[
+            ("search", 'snippet\n\n_harness: {"flags": []}', []),
+            ("get_article", 'edited page\n\n_harness: {"flags": []}', []),
+            ("get_article", 'clean page\n\n_harness: {"flags": ["consistency: x"]}', ["consistency: x"]),
+        ],
+    )
+    rows = [
+        gt_row(episode, 0, "search"),
+        gt_row(episode, 1, "get_article", corrupted=True, original="clean page", corrupted_text="edited page"),
+        gt_row(episode, 2, "get_article"),
+    ]
+    data = load_run(write_run(tmp_path / "pilot-1", [episode], rows))
+    counts = flag_counts(data)[("harness", "silently_wrong", "hotpotqa")]
+    assert counts == {"corrupted": (0, 1), "clean": (0, 1), "after_corrupted": (1, 1), "tool_errors": (0, 0)}
 
 
 def test_reflection_counts_tool_turns_with_a_thought():
@@ -157,7 +243,27 @@ def test_reflection_counts_tool_turns_with_a_thought():
     without = make_episode("haiku-5.5", "verify_prompt", "hotpotqa", "none", scenario="b", calls=[("search", "r", None)])
     without.turns[0].assistant_text = ""
     baseline = make_episode("haiku-5.5", "baseline", "hotpotqa", "none", calls=[("search", "r", None)])
-    assert reflection_counts([with_thought, without, baseline]) == {"verify_prompt": (1, 2)}
+    assert reflection_counts([with_thought, without, baseline]) == {
+        ("haiku-5.5", "verify_prompt"): {"turns": 2, "with_thought": 1, "check_first": 0}
+    }
+
+
+def test_check_lead_counts_only_turns_where_every_thought_starts_with_check():
+    every = make_episode("haiku-5.5", "verify_prompt", "hotpotqa", "none", scenario="a", calls=[("search", "r", None)])
+    every.turns[0].assistant_text = "Thought: Check: the result looks fine. Next I open the article."
+    mixed = make_episode("haiku-5.5", "verify_prompt", "hotpotqa", "none", scenario="b", calls=[("search", "r", None), ("search", "s", None)])
+    mixed.turns[0].assistant_text = "Thought: Check: looks fine.\nThought: Look up the second person."
+    assert reflection_counts([every, mixed]) == {("haiku-5.5", "verify_prompt"): {"turns": 2, "with_thought": 2, "check_first": 1}}
+
+
+def test_reflection_table_has_a_row_per_model(tmp_path):
+    haiku = make_episode("haiku-5.5", "harness", "hotpotqa", "none", calls=[("search", "r", None)])
+    luna = make_episode("gpt-6-luna", "harness", "hotpotqa", "none", calls=[("search", "r", None)])
+    luna.turns[0].assistant_text = "Thought: Check: the result looks fine."
+    text = reflection_table(load_run(write_run(tmp_path / "pilot-1", [haiku, luna])))
+    assert "| Model | Condition |" in text
+    assert "| gpt-6-luna | harness | 1/1 (100%) | 1/1 (100%) |" in text
+    assert "| haiku-5.5 | harness | 1/1 (100%) | 0/1 (0%) |" in text
 
 
 def test_projection_discloses_what_it_leaves_out(tmp_path):
@@ -198,5 +304,5 @@ def test_report_prints_every_section(tmp_path, capsys):
 
     assert main(["--run-id", "pilot-1", "--runs-dir", str(tmp_path)]) == 0
     out = capsys.readouterr().out
-    for heading in ["## Episodes", "## Fault injection", "## Harness flags", "## Reflection", "## Projected full-run cost"]:
+    for heading in ["## Episodes", "## Fault injection", "## Harness flags", "## LLM verifier verdicts", "## Reflection", "## Projected full-run cost"]:
         assert heading in out

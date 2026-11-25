@@ -4,7 +4,7 @@ Each model gets a sample HotpotQA question and our real search/get_article tools
 tool; the mock app answers the call, and the model must then reply again without an error.
 
 Usage:
-    python scripts/smoke_models.py                           # the four main-run models
+    python scripts/smoke_models.py                           # the main-run models (Opus, Haiku, Luna)
     python scripts/smoke_models.py --all                     # plus the two optional models
     python scripts/smoke_models.py --models opus-5.5 --tool-choice required
 """

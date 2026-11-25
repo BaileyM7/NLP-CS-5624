@@ -11,7 +11,7 @@ from toolharness.app.mock_app import MockApp
 from toolharness.data.scenario import FaultType
 from toolharness.llm import client as client_module
 from toolharness.llm.client import MAX_DELAY_S, LLMError, OpenRouterClient, ToolCallRequest, tools_from_mcp
-from toolharness.llm.models import FACT_EDIT_MODEL, JUDGE_MODEL, MAIN_RUN_MODELS, MODELS, VERIFIER_MODEL, get_model
+from toolharness.llm.models import FACT_EDIT_MODEL, JUDGE_MODEL, MAIN_RUN_DATASETS, MAIN_RUN_MODELS, MODELS, VERIFIER_MODEL, get_model
 from toolharness.mcp_server.registry import EpisodeRegistry
 from toolharness.mcp_server.server import build_server
 
@@ -42,14 +42,24 @@ TOOL_CALL_REPLY = completion(
 
 # Registry
 
-def test_registry_has_the_four_main_run_models_and_two_optional_ones():
-    assert MAIN_RUN_MODELS == ["opus-5.5", "haiku-5.5", "gpt-6-astra", "gpt-6-luna"]
-    assert sorted(MODELS) == sorted(MAIN_RUN_MODELS + ["sonnet-5.5", "gpt-6.1-sol"])
+def test_registry_has_the_three_main_run_models_and_three_others():
+    assert MAIN_RUN_MODELS == ["opus-5.5", "haiku-5.5", "gpt-6-luna"]
+    assert sorted(MODELS) == sorted(MAIN_RUN_MODELS + ["gpt-6-astra", "sonnet-5.5", "gpt-6.1-sol"])
+
+
+def test_opus_runs_hotpotqa_only_and_the_cheap_models_run_both_datasets():
+    assert MAIN_RUN_DATASETS == {
+        "opus-5.5": ("hotpotqa",),
+        "haiku-5.5": ("hotpotqa", "longseal"),
+        "gpt-6-luna": ("hotpotqa", "longseal"),
+    }
+    assert sorted(MAIN_RUN_DATASETS) == sorted(MAIN_RUN_MODELS)
 
 
 def test_roles_follow_the_experiment_spec():
-    assert (VERIFIER_MODEL, JUDGE_MODEL, FACT_EDIT_MODEL) == ("gpt-6-astra", "opus-5.5", "sonnet-5.5")
+    assert (VERIFIER_MODEL, JUDGE_MODEL, FACT_EDIT_MODEL) == ("gpt-6.1-sol", "opus-5.5", "sonnet-5.5")
     assert VERIFIER_MODEL != JUDGE_MODEL
+    assert VERIFIER_MODEL not in MAIN_RUN_MODELS  # the verifier never checks responses for a copy of itself
     assert {VERIFIER_MODEL, JUDGE_MODEL, FACT_EDIT_MODEL} <= set(MODELS)
 
 

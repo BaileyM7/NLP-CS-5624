@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .base import Check, CheckResult
+from .consistency import CONSISTENCY_OVERLAP, ConsistencyCheck
 from .format_check import FormatCheck
 from .freshness import FRESHNESS_DAYS, FreshnessCheck
 
@@ -13,7 +14,7 @@ HARNESS_CONDITIONS = ("harness", "flags_only")
 LINE_PREFIX = "_harness: "
 
 # The checks the harness runs, in the order they appear in the _harness line
-HARNESS_CHECKS: list[Check] = [FormatCheck(), FreshnessCheck()]
+HARNESS_CHECKS: list[Check] = [FormatCheck(), FreshnessCheck(), ConsistencyCheck()]
 
 
 def harness_settings(condition: str) -> dict | None:
@@ -23,5 +24,6 @@ def harness_settings(condition: str) -> dict | None:
     return {
         "checks": [check.key for check in HARNESS_CHECKS],
         "freshness_days": FRESHNESS_DAYS,
+        "consistency_overlap": CONSISTENCY_OVERLAP,
         "line_prefix": LINE_PREFIX,
     }

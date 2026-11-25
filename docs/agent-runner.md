@@ -12,7 +12,12 @@ python -m toolharness.agent --run-id pilot-1 --model haiku-5.5 --condition basel
 ```
 - `--questions N`: only the first N questions of each scenario file. The files are already a seeded, stratified sample. With HotpotQA and LongSeal together, each gets N.
 - `--faults`: only these fault types (default: all six). silently_wrong, stale and contradiction episodes need the server started with `--edits`, as above.
-- `--concurrency` (default 4) and `--seed` (default 0) are also available.
+- `--skip DATASET:FAULT` (repeatable): leave out one fault type on one dataset, e.g. `--skip longseal:contradiction`. The full runs and the pilot use exactly that one: contradiction almost never fires on LongSeal. One command still covers both scenario files, so the run manifest stays consistent. A bad value is a command-line error.
+- `--concurrency N`: episodes run at the same time.
+  - **Default:** 1 for Opus, GPT models and `llm_verifier` (its verifier is a GPT model); 4 for the rest.
+  - **Why:** OpenRouter's per-minute limit counts each call's requested `max_tokens`, so those models hit `HTTP 429` in parallel. In `pilot-2`, Opus at 4 episodes at once failed half its first attempts.
+  - Concurrency isn't an experiment setting, so changing it never conflicts with the run manifest.
+- `--seed` (default 0) is also available.
 - Run the same command again with `--model gpt-6-luna` to add a second model to the same run.
 - The command checks the server's `/health` first, and exits if the server isn't running.
 
@@ -61,7 +66,7 @@ The runner strips `thought` before calling the server, so the tool server and th
 | `flags_only` | `BASE_PROMPT`, plus `_harness` lines | ready |
 
 - **`BASE_PROMPT`** is in `agent/prompts.py`. It states today's date (November 1, 2026, the mock app's "now") and never mentions faults. It tells the agent that search results are only excerpts, so it should open the articles it relies on: in the first pilot smoke stage, agents often answered from snippets alone, so faults (which fire on article pages) rarely got a chance to fire.
-- **Verification instruction (#21):** `VERIFY_INSTRUCTION` in `agent/prompts.py`. It asks the model to check every tool result before relying on it, and to start each thought with that check. `verify_prompt` and `harness` use the identical text, so comparing them isolates the effect of the `_harness` flags. It's frozen experiment text, recorded in the manifest's `system_prompt`.
+- **Verification instruction (#21):** `VERIFY_INSTRUCTION` in `agent/prompts.py`. It asks the model to check every tool result before relying on it, and to begin every thought with "Check:" and one short sentence on whether the last result looks reliable. A fixed lead is easy to follow and easy for the judge and the pilot report to find. (The first pilot's looser wording, "start each thought with that check", was mostly ignored by Haiku.) `verify_prompt` and `harness` use the identical text, so comparing them isolates the effect of the `_harness` flags. It's frozen experiment text, recorded in the manifest's `system_prompt`.
 - **Harness conditions:** `harness` and `flags_only` turn on the harness layer automatically; no extra server or URL is needed. Their trace fields `harness_flags` and `proxy_latency_ms` are filled; see [the harness doc](harness.md).
 - **LLM verifier:** `llm_verifier` wraps the tool session with a passive verifier; it adds an assessment to each tool-server response without using the verification prompt or harness checks. See [the harness doc](harness.md).
 - Batch summaries report agent and verifier costs separately for `llm_verifier`.

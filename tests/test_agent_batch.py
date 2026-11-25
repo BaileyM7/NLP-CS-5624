@@ -1,15 +1,19 @@
 """Tests for batch runs: scenario selection, episode IDs, resume, the run manifest and the command line."""
+import argparse
 import dataclasses
 import json
 
 import pytest
 from fakes import SAMPLE_FILE, FakeOpenRouter, answer_reply, free_port, make_client, tool_reply
 
-from toolharness.agent.__main__ import main
+import toolharness.agent.__main__ as cli
+from toolharness.agent.__main__ import main, parse_skip
 from toolharness.agent.batch import (
     BatchConfig,
+    BatchSummary,
     ManifestMismatch,
     check_manifest,
+    default_concurrency,
     make_episode_id,
     manifest_entry,
     run_batch,
@@ -67,6 +71,58 @@ def test_select_scenarios_takes_the_first_questions_and_chosen_faults(sample_sce
     assert len(picked) == 4
     assert [s.fault_type for s in picked].count(FaultType.NONE) == 2
     assert select_scenarios(sample_scenarios, None, None) == sample_scenarios
+
+
+def test_skip_drops_only_that_dataset_and_fault(sample_scenarios):
+    longseal = [s.model_copy(update={"dataset": "longseal", "scenario_id": "longseal-" + s.scenario_id}) for s in sample_scenarios]
+    picked = select_scenarios(sample_scenarios + longseal, None, None, skip=[("longseal", FaultType.CONTRADICTION)])
+
+    assert len(picked) == 2 * len(sample_scenarios) - 5  # the 5 sample questions each have one contradiction scenario
+    assert not any(s.dataset == "longseal" and s.fault_type == FaultType.CONTRADICTION for s in picked)
+    assert any(s.dataset == "hotpotqa" and s.fault_type == FaultType.CONTRADICTION for s in picked)
+
+
+def test_skip_parses_and_rejects_unknown_values():
+    assert parse_skip("longseal:contradiction") == ("longseal", FaultType.CONTRADICTION)
+    for bad in ["nope:stale", "longseal:nope", "longseal"]:
+        with pytest.raises(argparse.ArgumentTypeError):
+            parse_skip(bad)
+
+    argv = ["--run-id", "r", "--model", "haiku-5.5", "--condition", "baseline", "--scenarios", str(SAMPLE_FILE), "--skip", "nope:stale"]
+    with pytest.raises(SystemExit) as exit_info:
+        main(argv)
+    assert exit_info.value.code == 2
+
+
+def test_opus_gpt_models_and_llm_verifier_run_one_episode_at_a_time():
+    assert default_concurrency("opus-5.5", "baseline") == 1
+    assert default_concurrency("gpt-6-luna", "harness") == 1
+    assert default_concurrency("haiku-5.5", "llm_verifier") == 1  # its verifier is a GPT model
+    assert default_concurrency("haiku-5.5", "baseline") == 4
+
+
+def test_command_line_uses_the_model_default_unless_concurrency_is_given(monkeypatch):
+    seen = []
+
+    async def fake_run(config):
+        seen.append(config.concurrency)
+        return BatchSummary()
+
+    monkeypatch.setattr(cli, "check_server", lambda url: True)
+    monkeypatch.setattr(cli, "run", fake_run)
+    argv = ["--run-id", "r", "--condition", "baseline", "--scenarios", str(SAMPLE_FILE)]
+    main(argv + ["--model", "opus-5.5"])
+    main(argv + ["--model", "haiku-5.5"])
+    main(argv + ["--model", "opus-5.5", "--concurrency", "3"])
+    assert seen == [1, 4, 3]
+
+
+@pytest.mark.anyio
+async def test_batch_skips_the_chosen_dataset_and_fault(config, open_session):
+    config = dataclasses.replace(config, faults=[FaultType.NONE, FaultType.CONTRADICTION], skip=[("hotpotqa", FaultType.CONTRADICTION)])
+    summary = await batch(config, FakeOpenRouter(ANSWER), open_session)
+    assert (summary.ran, summary.skipped) == (1, 0)
+    assert [e.fault_type for e in read_jsonl(trace_path(config))] == [FaultType.NONE]
 
 
 def test_episode_id_format():
