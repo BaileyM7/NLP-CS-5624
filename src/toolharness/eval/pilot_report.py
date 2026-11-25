@@ -293,14 +293,15 @@ def corrupted_call(episode: Episode, gt_rows: list[dict]) -> tuple[int, int] | N
 
 
 def flag_counts(data: RunData) -> dict[tuple[str, str, str], dict[str, tuple[int, int]]]:
-    """(flagged, total) tool responses per (harness condition, fault, dataset), in three kinds:
-    the corrupted response, clean responses, and tool errors that weren't corrupted (e.g. bad arguments)."""
+    """(flagged, total) tool responses per (harness condition, fault, dataset), in four kinds:
+    the corrupted response; clean responses before it (or in an episode without one); clean responses after it,
+    which can genuinely conflict with it; and tool errors that weren't corrupted (e.g. bad arguments)."""
     counts: dict[tuple[str, str, str], dict[str, list[int]]] = {}
     for episode in data.episodes:
         if episode.condition not in HARNESS_CONDITIONS:
             continue
         key = (episode.condition, episode.fault_type.value, episode.dataset)
-        bucket = counts.setdefault(key, {"corrupted": [0, 0], "clean": [0, 0], "tool_errors": [0, 0]})
+        bucket = counts.setdefault(key, {"corrupted": [0, 0], "clean": [0, 0], "after_corrupted": [0, 0], "tool_errors": [0, 0]})
         where = corrupted_call(episode, data.gt_rows.get(episode.episode_id, []))
         for turn in episode.turns:
             for number, call in enumerate(turn.tool_calls, start=1):
@@ -310,6 +311,8 @@ def flag_counts(data: RunData) -> dict[tuple[str, str, str], dict[str, tuple[int
                     kind = "corrupted"
                 elif call.is_error:
                     kind = "tool_errors"
+                elif where is not None and (turn.index, number) > where:
+                    kind = "after_corrupted"
                 else:
                     kind = "clean"
                 bucket[kind][1] += 1
@@ -385,13 +388,14 @@ def flag_table(data: RunData) -> str:
     lines = [
         "## Harness flags",
         "Share of tool responses with at least one flag. hard_failure, malformed and stale should be flagged every time; "
-        "silently_wrong and contradiction can't be caught by these checks. Flags on clean responses are the checks' false flags. "
+        "the consistency check catches contradiction and part of silently_wrong and stale. Flags on clean responses are "
+        "the checks' false flags. A clean response after the corrupted one can genuinely conflict with it, so it is counted apart. "
         "Tool errors are error results that weren't corrupted (e.g. bad arguments): flagged correctly, but not a fault.",
-        "| Condition | Fault | Dataset | Corrupted response flagged | Clean responses flagged | Tool errors flagged |",
-        "|---|---|---|---|---|---|",
+        "| Condition | Fault | Dataset | Corrupted response flagged | Clean responses flagged | Clean, after the corrupted one, flagged | Tool errors flagged |",
+        "|---|---|---|---|---|---|---|",
     ]
     for (condition, fault, dataset), counts in sorted(flag_counts(data).items()):
-        cells = f"{share(*counts['corrupted'])} | {share(*counts['clean'])} | {share(*counts['tool_errors'])}"
+        cells = " | ".join(share(*counts[kind]) for kind in ("corrupted", "clean", "after_corrupted", "tool_errors"))
         lines.append(f"| {condition} | {fault} | {dataset} | {cells} |")
     return "\n".join(lines)
 

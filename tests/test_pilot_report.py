@@ -147,9 +147,29 @@ def test_flags_are_split_by_fault_and_by_corrupted_clean_and_tool_error_response
     ]
     data = load_run(write_run(tmp_path / "pilot-1", [episode, bad_args], rows))
     assert flag_counts(data) == {
-        ("harness", "malformed", "hotpotqa"): {"corrupted": (1, 1), "clean": (0, 1), "tool_errors": (0, 0)},
-        ("harness", "none", "hotpotqa"): {"corrupted": (0, 0), "clean": (0, 0), "tool_errors": (1, 1)},
+        ("harness", "malformed", "hotpotqa"): {"corrupted": (1, 1), "clean": (0, 1), "after_corrupted": (0, 0), "tool_errors": (0, 0)},
+        ("harness", "none", "hotpotqa"): {"corrupted": (0, 0), "clean": (0, 0), "after_corrupted": (0, 0), "tool_errors": (1, 1)},
     }
+
+
+def test_clean_responses_after_the_corrupted_one_are_counted_apart(tmp_path):
+    # A clean re-fetch that conflicts with the earlier corrupted page is a real conflict, not a false flag
+    episode = make_episode(
+        "haiku-5.5", "harness", "hotpotqa", "silently_wrong",
+        calls=[
+            ("search", 'snippet\n\n_harness: {"flags": []}', []),
+            ("get_article", 'edited page\n\n_harness: {"flags": []}', []),
+            ("get_article", 'clean page\n\n_harness: {"flags": ["consistency: x"]}', ["consistency: x"]),
+        ],
+    )
+    rows = [
+        gt_row(episode, 0, "search"),
+        gt_row(episode, 1, "get_article", corrupted=True, original="clean page", corrupted_text="edited page"),
+        gt_row(episode, 2, "get_article"),
+    ]
+    data = load_run(write_run(tmp_path / "pilot-1", [episode], rows))
+    counts = flag_counts(data)[("harness", "silently_wrong", "hotpotqa")]
+    assert counts == {"corrupted": (0, 1), "clean": (0, 1), "after_corrupted": (1, 1), "tool_errors": (0, 0)}
 
 
 def test_reflection_counts_tool_turns_with_a_thought():
