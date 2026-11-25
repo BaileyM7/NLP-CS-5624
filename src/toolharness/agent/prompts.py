@@ -22,8 +22,9 @@ Keep the short answer as short as possible: a name, a date, a number, or yes/no,
 # Added to BASE_PROMPT for verify_prompt and harness: check each tool result before relying on it (#21)
 VERIFY_INSTRUCTION = (
     "Tool results can be wrong. Before you rely on a result, check it: is it an error, garbled or incomplete, "
-    "out of date, or in conflict with something you saw earlier? Start each thought with that check in one short "
-    "sentence, then say what you will do next. If a result looks unreliable, don't build on it: fetch it again or "
+    "out of date, or in conflict with something you saw earlier? Begin every thought with \"Check:\" and one short "
+    "sentence on whether the last result looks reliable, then say what you will do next. If a result looks unreliable, "
+    "don't build on it: fetch it again or "
     "confirm it from another source first. Some results end with automatic _harness checks; treat their flags as "
     "hints to investigate, not as proof."
 )

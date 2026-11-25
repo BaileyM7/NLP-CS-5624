@@ -321,20 +321,23 @@ def flag_counts(data: RunData) -> dict[tuple[str, str, str], dict[str, tuple[int
     return {key: {kind: (v[0], v[1]) for kind, v in value.items()} for key, value in counts.items()}
 
 
-def reflection_counts(episodes: list[Episode]) -> dict[str, tuple[int, int]]:
-    """Per verification condition: tool-calling turns whose text has a thought, out of all tool-calling turns."""
-    counts: dict[str, list[int]] = {}
+def reflection_counts(episodes: list[Episode]) -> dict[str, dict[str, int]]:
+    """Per verification condition: tool-calling turns, those with a thought, and those where every thought starts with "Check:"."""
+    counts: dict[str, dict[str, int]] = {}
     for episode in episodes:
         if episode.condition not in ("verify_prompt", "harness"):
             continue
         for turn in episode.turns:
             if not turn.tool_calls:
                 continue
-            count = counts.setdefault(episode.condition, [0, 0])
-            count[1] += 1
-            if "Thought: " in turn.assistant_text:
-                count[0] += 1
-    return {condition: (value[0], value[1]) for condition, value in counts.items()}
+            count = counts.setdefault(episode.condition, {"turns": 0, "with_thought": 0, "check_first": 0})
+            count["turns"] += 1
+            thoughts = [line for line in turn.assistant_text.splitlines() if line.startswith("Thought: ")]
+            if thoughts:
+                count["with_thought"] += 1
+            if thoughts and all(line.startswith("Thought: Check:") for line in thoughts):
+                count["check_first"] += 1
+    return counts
 
 
 # Tables
@@ -403,12 +406,13 @@ def flag_table(data: RunData) -> str:
 def reflection_table(data: RunData) -> str:
     lines = [
         "## Reflection",
-        "Tool-calling turns with a thought (#21). Whether each thought starts with a reliability check is read by hand.",
-        "| Condition | Turns with a thought |",
-        "|---|---|",
+        "Tool-calling turns with a thought, and turns where every thought begins with \"Check:\" as the verification prompt "
+        "asks (#21). Whether the check itself is meaningful is read by hand.",
+        "| Condition | Turns with a thought | Every thought starts with Check: |",
+        "|---|---|---|",
     ]
     for condition, counts in sorted(reflection_counts(data.episodes).items()):
-        lines.append(f"| {condition} | {share(*counts)} |")
+        lines.append(f"| {condition} | {share(counts['with_thought'], counts['turns'])} | {share(counts['check_first'], counts['turns'])} |")
     return "\n".join(lines)
 
 

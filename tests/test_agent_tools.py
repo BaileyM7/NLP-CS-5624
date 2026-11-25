@@ -50,6 +50,12 @@ def test_verify_prompt_and_harness_share_the_verification_instruction():
     assert VERIFY_INSTRUCTION.endswith("treat their flags as hints to investigate, not as proof.")
 
 
+def test_verify_instruction_asks_every_thought_to_begin_with_check():
+    lead = 'Begin every thought with "Check:" and one short sentence on whether the last result looks reliable'
+    assert lead in VERIFY_INSTRUCTION
+    assert "Start each thought with that check" not in VERIFY_INSTRUCTION
+
+
 def test_every_condition_is_ready():
     for condition in ("baseline", "verify_prompt", "llm_verifier", "harness", "flags_only"):
         require_ready(condition)

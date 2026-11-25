@@ -177,7 +177,15 @@ def test_reflection_counts_tool_turns_with_a_thought():
     without = make_episode("haiku-5.5", "verify_prompt", "hotpotqa", "none", scenario="b", calls=[("search", "r", None)])
     without.turns[0].assistant_text = ""
     baseline = make_episode("haiku-5.5", "baseline", "hotpotqa", "none", calls=[("search", "r", None)])
-    assert reflection_counts([with_thought, without, baseline]) == {"verify_prompt": (1, 2)}
+    assert reflection_counts([with_thought, without, baseline]) == {"verify_prompt": {"turns": 2, "with_thought": 1, "check_first": 0}}
+
+
+def test_check_lead_counts_only_turns_where_every_thought_starts_with_check():
+    every = make_episode("haiku-5.5", "verify_prompt", "hotpotqa", "none", scenario="a", calls=[("search", "r", None)])
+    every.turns[0].assistant_text = "Thought: Check: the result looks fine. Next I open the article."
+    mixed = make_episode("haiku-5.5", "verify_prompt", "hotpotqa", "none", scenario="b", calls=[("search", "r", None), ("search", "s", None)])
+    mixed.turns[0].assistant_text = "Thought: Check: looks fine.\nThought: Look up the second person."
+    assert reflection_counts([every, mixed]) == {"verify_prompt": {"turns": 2, "with_thought": 2, "check_first": 1}}
 
 
 def test_projection_discloses_what_it_leaves_out(tmp_path):
