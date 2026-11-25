@@ -24,7 +24,8 @@ from .trace import Episode, read_jsonl
 
 CHEAP_MODELS = ("haiku-5.5", "gpt-6-luna")  # run on every condition and both datasets, so their ratios scale the rest
 DATASETS = ("hotpotqa", "longseal")
-FAULTS_PER_QUESTION = len(FaultType)  # every question runs once per fault type, `none` included
+# Fault types each question runs under, `none` included; LongSeal leaves out contradiction, which almost never fires there
+FAULT_TYPES = {"hotpotqa": len(FaultType), "longseal": len(FaultType) - 1}
 MAIN_CONDITIONS = ("baseline", "verify_prompt", "harness")
 OPTIONAL_CONDITIONS = ("flags_only",)
 QUESTION_COUNTS = {"hotpotqa": (25, 50, 100), "longseal": (15, 30)}
@@ -163,7 +164,7 @@ def projected_total(costs: dict, condition: str, dataset: str, n: int) -> tuple[
             return None, [estimate.note]
         if estimate.note != "measured":
             notes.append(f"{model} {condition} on {dataset}: {estimate.note}")
-        total += estimate.cost * n * FAULTS_PER_QUESTION
+        total += estimate.cost * n * FAULT_TYPES[dataset]
     return total, notes
 
 
@@ -185,8 +186,21 @@ def verifier_cost(episodes: list[Episode], dataset: str) -> float | None:
     return mean(per_episode) if per_episode else None
 
 
+def measured_verifier_cost(episodes: list[Episode], dataset: str) -> float | None:
+    """The cheap models' mean measured verifier cost per llm_verifier episode on a dataset."""
+    costs = []
+    for episode in episodes:
+        if episode.model in CHEAP_MODELS and episode.condition == "llm_verifier" and episode.dataset == dataset:
+            costs.append(episode.totals.verifier_cost_usd)
+    return mean(costs) if costs else None
+
+
 def llm_verifier_total(data: RunData, costs: dict, dataset: str, n: int) -> tuple[float | None, list[str]]:
-    """Prefer measured agent plus verifier cost; estimate missing model/dataset cells from baseline."""
+    """Projected llm_verifier cost: measured where a model ran it; otherwise a scaled agent part plus a flat verifier part.
+
+    The verifier is always the same model, so its cost is never scaled by the agent model's price.
+    """
+    verifier_measured = measured_verifier_cost(data.episodes, dataset)
     verifier_estimate = verifier_cost(data.episodes, dataset)
     total = 0.0
     notes = []
@@ -197,16 +211,27 @@ def llm_verifier_total(data: RunData, costs: dict, dataset: str, n: int) -> tupl
             if e.model == model and e.condition == "llm_verifier" and e.dataset == dataset
         ]
         if measured:
-            cost = mean(measured)
-        else:
+            total += mean(measured) * n * FAULT_TYPES[dataset]
+            continue
+
+        # Agent part: scaled like any condition (costs hold agent cost only), else the model's baseline
+        agent = estimate_cost(costs, model, "llm_verifier", dataset)
+        basis = "agent"
+        if agent.cost is None:
             agent = estimate_cost(costs, model, "baseline", dataset)
-            if agent.cost is None:
-                return None, [agent.note]
-            if verifier_estimate is None:
-                return None, [f"missing: cheap-model baseline on {dataset} (for the verifier estimate)"]
-            cost = agent.cost + verifier_estimate
-            notes.append(f"{model} llm_verifier on {dataset}: {agent.note} baseline plus estimated verifier")
-        total += cost * n * FAULTS_PER_QUESTION
+            basis = "agent from baseline (no llm_verifier measurement to scale from)"
+        if agent.cost is None:
+            return None, [agent.note]
+
+        # Verifier part: the cheap models' measured cost, else the estimate from response sizes
+        if verifier_measured is not None:
+            verifier, how = verifier_measured, "measured cheap-model verifier cost"
+        elif verifier_estimate is not None:
+            verifier, how = verifier_estimate, "estimated verifier cost (from response sizes)"
+        else:
+            return None, [f"missing: cheap-model llm_verifier or baseline on {dataset} (for the verifier part)"]
+        notes.append(f"{model} llm_verifier on {dataset}: {basis} {agent.note}, plus {how}")
+        total += (agent.cost + verifier) * n * FAULT_TYPES[dataset]
     return total, notes
 
 
@@ -221,7 +246,8 @@ def project_costs(data: RunData) -> str:
     costs = mean_costs(data.episodes)
     lines = [
         "## Projected full-run cost",
-        f"The 4 main-run models x {FAULTS_PER_QUESTION} fault types per question, one seed, no repeats.",
+        f"The 4 main-run models x {FAULT_TYPES['hotpotqa']} fault types per HotpotQA question and {FAULT_TYPES['longseal']} per "
+        "LongSeal question (contradiction: HotpotQA only), one seed, no repeats.",
     ]
     all_notes: list[str] = []
     for dataset in DATASETS:
@@ -255,9 +281,10 @@ def project_costs(data: RunData) -> str:
         "- **Not included:** the answer judge (#23: two Opus passes per episode, likely adding about half again on top of the "
         "agent cost), the fact-edit model, and failed attempts that were retried (their spend is in llm_usage.jsonl, not the traces).",
         "- HotpotQA N=100 needs new scenarios plus new fact edits and their review; the current file has 50 questions. LongSeal has 30.",
-        f"- Unmeasured llm_verifier cells: agent cost taken as baseline; verifier = one {VERIFIER_MODEL} call per tool response, input = question + "
-        f"every response so far at {CHARS_PER_TOKEN} characters per token, output = {VERIFIER_OUTPUT_TOKENS} tokens. Call counts "
-        "and response sizes come from the cheap models' baseline episodes and are applied to every model.",
+        "- llm_verifier for models that didn't run it: the agent part is scaled like any condition; the verifier part is the "
+        f"cheap models' measured {VERIFIER_MODEL} cost per episode, added unscaled (the verifier is the same model for every agent). "
+        f"Without that measurement it is estimated: one call per tool response, input = question + every response so far at "
+        f"{CHARS_PER_TOKEN} characters per token, output = {VERIFIER_OUTPUT_TOKENS} tokens.",
     ]
     for note in sorted(set(all_notes)):
         if not note.startswith("missing:"):
@@ -321,16 +348,43 @@ def flag_counts(data: RunData) -> dict[tuple[str, str, str], dict[str, tuple[int
     return {key: {kind: (v[0], v[1]) for kind, v in value.items()} for key, value in counts.items()}
 
 
-def reflection_counts(episodes: list[Episode]) -> dict[str, dict[str, int]]:
-    """Per verification condition: tool-calling turns, those with a thought, and those where every thought starts with "Check:"."""
-    counts: dict[str, dict[str, int]] = {}
+def verifier_counts(data: RunData) -> dict[tuple[str, str], dict[str, tuple[int, int]]]:
+    """(suspicious, total) LLM-verifier verdicts per (fault, dataset), in the same four kinds as the harness flags."""
+    counts: dict[tuple[str, str], dict[str, list[int]]] = {}
+    for episode in data.episodes:
+        if episode.condition != "llm_verifier":
+            continue
+        key = (episode.fault_type.value, episode.dataset)
+        bucket = counts.setdefault(key, {"corrupted": [0, 0], "clean": [0, 0], "after_corrupted": [0, 0], "tool_errors": [0, 0]})
+        where = corrupted_call(episode, data.gt_rows.get(episode.episode_id, []))
+        for turn in episode.turns:
+            for number, call in enumerate(turn.tool_calls, start=1):
+                if call.verifier_output is None:  # runner-made results never reached the verifier
+                    continue
+                if where == (turn.index, number):
+                    kind = "corrupted"
+                elif call.is_error:
+                    kind = "tool_errors"
+                elif where is not None and (turn.index, number) > where:
+                    kind = "after_corrupted"
+                else:
+                    kind = "clean"
+                bucket[kind][1] += 1
+                if call.verifier_output.suspicious:
+                    bucket[kind][0] += 1
+    return {key: {kind: (v[0], v[1]) for kind, v in value.items()} for key, value in counts.items()}
+
+
+def reflection_counts(episodes: list[Episode]) -> dict[tuple[str, str], dict[str, int]]:
+    """Per model and verification condition: tool-calling turns, those with a thought, and those where every thought starts with "Check:"."""
+    counts: dict[tuple[str, str], dict[str, int]] = {}
     for episode in episodes:
         if episode.condition not in ("verify_prompt", "harness"):
             continue
         for turn in episode.turns:
             if not turn.tool_calls:
                 continue
-            count = counts.setdefault(episode.condition, {"turns": 0, "with_thought": 0, "check_first": 0})
+            count = counts.setdefault((episode.model, episode.condition), {"turns": 0, "with_thought": 0, "check_first": 0})
             count["turns"] += 1
             thoughts = [line for line in turn.assistant_text.splitlines() if line.startswith("Thought: ")]
             if thoughts:
@@ -403,16 +457,32 @@ def flag_table(data: RunData) -> str:
     return "\n".join(lines)
 
 
+def verifier_table(data: RunData) -> str:
+    lines = [
+        "## LLM verifier verdicts",
+        "Share of tool responses the verifier called suspicious, in the llm_verifier condition. Suspicious verdicts on clean "
+        "responses are its false alarms; a clean response after the corrupted one can genuinely conflict with it.",
+        "| Fault | Dataset | Corrupted response suspicious | Clean responses suspicious | Clean, after the corrupted one, suspicious | Tool errors suspicious |",
+        "|---|---|---|---|---|---|",
+    ]
+    for (fault, dataset), counts in sorted(verifier_counts(data).items()):
+        cells = " | ".join(share(*counts[kind]) for kind in ("corrupted", "clean", "after_corrupted", "tool_errors"))
+        lines.append(f"| {fault} | {dataset} | {cells} |")
+    return "\n".join(lines)
+
+
 def reflection_table(data: RunData) -> str:
     lines = [
         "## Reflection",
         "Tool-calling turns with a thought, and turns where every thought begins with \"Check:\" as the verification prompt "
         "asks (#21). Whether the check itself is meaningful is read by hand.",
-        "| Condition | Turns with a thought | Every thought starts with Check: |",
-        "|---|---|---|",
+        "| Model | Condition | Turns with a thought | Every thought starts with Check: |",
+        "|---|---|---|---|",
     ]
-    for condition, counts in sorted(reflection_counts(data.episodes).items()):
-        lines.append(f"| {condition} | {share(counts['with_thought'], counts['turns'])} | {share(counts['check_first'], counts['turns'])} |")
+    for (model, condition), counts in sorted(reflection_counts(data.episodes).items()):
+        with_thought = share(counts["with_thought"], counts["turns"])
+        check_first = share(counts["check_first"], counts["turns"])
+        lines.append(f"| {model} | {condition} | {with_thought} | {check_first} |")
     return "\n".join(lines)
 
 
@@ -421,7 +491,14 @@ def report(data: RunData) -> str:
     warnings = ground_truth_warnings(data)
     if warnings:
         sections.append("## Warnings\n" + "\n".join(f"- {warning}" for warning in warnings))
-    sections += [episode_table(data), injection_table(data), flag_table(data), reflection_table(data), project_costs(data)]
+    sections += [
+        episode_table(data),
+        injection_table(data),
+        flag_table(data),
+        verifier_table(data),
+        reflection_table(data),
+        project_costs(data),
+    ]
     return "\n\n".join(sections)
 
 

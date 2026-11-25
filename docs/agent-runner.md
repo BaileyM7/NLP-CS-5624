@@ -12,6 +12,7 @@ python -m toolharness.agent --run-id pilot-1 --model haiku-5.5 --condition basel
 ```
 - `--questions N`: only the first N questions of each scenario file. The files are already a seeded, stratified sample. With HotpotQA and LongSeal together, each gets N.
 - `--faults`: only these fault types (default: all six). silently_wrong, stale and contradiction episodes need the server started with `--edits`, as above.
+- `--skip DATASET:FAULT` (repeatable): leave out one fault type on one dataset, e.g. `--skip longseal:contradiction`. The full runs and the pilot use exactly that one: contradiction almost never fires on LongSeal. One command still covers both scenario files, so the run manifest stays consistent. A bad value is a command-line error.
 - `--concurrency` (default 4) and `--seed` (default 0) are also available.
 - Run the same command again with `--model gpt-6-luna` to add a second model to the same run.
 - The command checks the server's `/health` first, and exits if the server isn't running.

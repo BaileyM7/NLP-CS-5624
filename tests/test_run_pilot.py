@@ -44,8 +44,34 @@ def test_stage_commands():
     module = load_script()
     cheap_models = {"haiku-5.5", "gpt-6-luna"}
     check_stage(module.stage_commands("smoke", "py"), "pilot-smoke", 1, [HOTPOTQA, LONGSEAL], cheap_models, FOUR_CONDITIONS)
-    check_stage(module.stage_commands("cheap", "py"), "pilot-1", 5, [HOTPOTQA, LONGSEAL], cheap_models, FOUR_CONDITIONS)
-    check_stage(module.stage_commands("big", "py"), "pilot-1", 2, [HOTPOTQA], {"opus-5.5", "gpt-6-astra"}, {"baseline", "harness"})
+    check_stage(module.stage_commands("cheap", "py"), "pilot-2", 5, [HOTPOTQA, LONGSEAL], cheap_models, FOUR_CONDITIONS)
+    # The verifier stage measures the same 5 questions as cheap, with Haiku as the only agent
+    check_stage(module.stage_commands("verifier", "py"), "pilot-2", 5, [HOTPOTQA, LONGSEAL], {"haiku-5.5"}, {"llm_verifier"})
+    check_stage(module.stage_commands("big", "py"), "pilot-2", 2, [HOTPOTQA], {"opus-5.5", "gpt-6-astra"}, {"baseline", "harness"})
+
+
+def test_stages_skip_longseal_contradiction():
+    module = load_script()
+    for stage in ("smoke", "cheap", "verifier"):
+        for command in module.stage_commands(stage, "py"):
+            assert option(command, "--skip") == ["longseal:contradiction"]
+    for command in module.stage_commands("big", "py"):
+        assert "--skip" not in command  # HotpotQA only
+
+
+def test_gpt_models_and_the_verifier_stage_default_to_concurrency_1():
+    module = load_script()
+    for stage in ("smoke", "cheap", "big"):
+        for command in module.stage_commands(stage, "py"):
+            model = option(command, "--model")[0]
+            if model.startswith("gpt"):
+                assert option(command, "--concurrency") == ["1"]
+            else:
+                assert "--concurrency" not in command
+    for command in module.stage_commands("verifier", "py"):
+        assert option(command, "--concurrency") == ["1"]  # the verifier is a GPT model
+    for command in module.stage_commands("cheap", "py", concurrency=3):
+        assert option(command, "--concurrency") == ["3"]
 
 
 def test_run_id_and_server_url_can_be_overridden():

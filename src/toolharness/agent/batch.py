@@ -65,6 +65,7 @@ class BatchConfig:
     seed: int = 0
     concurrency: int = 4
     runs_dir: Path = Path("runs")
+    skip: list[tuple[str, FaultType]] = field(default_factory=list)  # (dataset, fault) pairs to leave out
 
     @property
     def run_dir(self) -> Path:
@@ -85,8 +86,14 @@ class ManifestMismatch(Exception):
     """A resumed run would use different experiment settings than the ones it started with."""
 
 
-def select_scenarios(scenarios: list[Scenario], questions: int | None, faults: list[FaultType] | None) -> list[Scenario]:
-    """The first `questions` distinct questions in file order, limited to the chosen fault types."""
+def select_scenarios(
+    scenarios: list[Scenario],
+    questions: int | None,
+    faults: list[FaultType] | None,
+    skip: list[tuple[str, FaultType]] = (),
+) -> list[Scenario]:
+    """The first `questions` distinct questions in file order, limited to the chosen fault types,
+    without any (dataset, fault) pair in `skip`."""
     question_ids: list[str] = []
     for scenario in scenarios:
         if scenario.question_id not in question_ids:
@@ -96,8 +103,13 @@ def select_scenarios(scenarios: list[Scenario], questions: int | None, faults: l
 
     chosen = []
     for scenario in scenarios:
-        if scenario.question_id in question_ids and (faults is None or scenario.fault_type in faults):
-            chosen.append(scenario)
+        if scenario.question_id not in question_ids:
+            continue
+        if faults is not None and scenario.fault_type not in faults:
+            continue
+        if (scenario.dataset, scenario.fault_type) in skip:
+            continue
+        chosen.append(scenario)
     return chosen
 
 
@@ -220,7 +232,7 @@ async def run_batch(
     # --questions applies to each file separately, so HotpotQA and LongSeal both get N questions
     selected: list[Scenario] = []
     for path in config.scenario_files:
-        selected.extend(select_scenarios(read_scenarios(path), config.questions, config.faults))
+        selected.extend(select_scenarios(read_scenarios(path), config.questions, config.faults, config.skip))
 
     run_dir = config.run_dir
     run_dir.mkdir(parents=True, exist_ok=True)

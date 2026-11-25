@@ -3,6 +3,8 @@
 Usage:
     python -m toolharness.agent --run-id pilot-1 --model haiku-5.5 --condition baseline \
         --scenarios data/scenarios/hotpotqa.jsonl --questions 5 --faults none hard_failure malformed
+    python -m toolharness.agent ... --scenarios data/scenarios/hotpotqa.jsonl data/scenarios/longseal.jsonl \
+        --skip longseal:contradiction
 """
 from __future__ import annotations
 
@@ -12,12 +14,22 @@ import sys
 from pathlib import Path
 from typing import get_args
 
-from ..data.scenario import FaultType
+from ..data.scenario import Dataset, FaultType
 from ..eval.trace import Condition
 from ..llm.client import LLMError, OpenRouterClient
 from ..llm.models import MODELS
 from .batch import DEFAULT_SERVER_URL, BatchConfig, BatchSummary, ManifestMismatch, check_server, health_url, run_batch
 from .prompts import ConditionNotReady, require_ready
+
+
+def parse_skip(value: str) -> tuple[str, FaultType]:
+    """A DATASET:FAULT pair for --skip, e.g. "longseal:contradiction"."""
+    dataset, _, fault = value.partition(":")
+    if dataset not in get_args(Dataset) or fault not in [f.value for f in FaultType]:
+        raise argparse.ArgumentTypeError(
+            f"expected DATASET:FAULT with a dataset from {', '.join(get_args(Dataset))} and a fault type, got {value!r}"
+        )
+    return dataset, FaultType(fault)
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -31,6 +43,10 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--faults", nargs="+", choices=[fault.value for fault in FaultType], help="only these fault types")
     parser.add_argument("--seed", type=int, default=0, help="fault-injector seed")
     parser.add_argument("--concurrency", type=int, default=4, help="episodes run at the same time")
+    parser.add_argument(
+        "--skip", action="append", type=parse_skip, default=[], metavar="DATASET:FAULT",
+        help="leave out one fault type on one dataset, e.g. longseal:contradiction (repeatable)",
+    )
     return parser.parse_args(argv)
 
 
@@ -61,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         faults=[FaultType(value) for value in args.faults] if args.faults else None,
         seed=args.seed,
         concurrency=args.concurrency,
+        skip=args.skip,
     )
     try:
         summary = asyncio.run(run(config))
